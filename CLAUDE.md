@@ -203,10 +203,10 @@ To customize your local environment, copy `.claude/settings.local.json.template`
   - Created POSIX-compliant prettier formatting script (`.claude/hooks/prettier-format.sh`)
   - Configured PostToolUse hook in `.claude/settings.json` for Edit/Write/MultiEdit operations
   - Successfully tested with JavaScript and JSON files
-  - Created PR #2 demonstrating complete GitHub Actions workflow
+  - Created PR #3 demonstrating complete GitHub Actions workflow
   - Resolves previous shell syntax errors with proper POSIX compliance
 
-- **Current Branch**: `feat/prettier-hook` - Ready for review with PR #2
+- **Current Branch**: `feat/prettier-hook` - Ready for review with PR #3
 
 - **Next steps**:
   - Merge prettier hook PR once CI passes
