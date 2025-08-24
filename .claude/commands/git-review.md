@@ -3,11 +3,13 @@
 Create a pull request with automatic dynamic checklists based on changed files.
 
 ## Usage
+
 ```
 /git-review [#issue-number]
 ```
 
 ## What this does
+
 1. Commits all remaining changes: `feat: complete <feature-name>`
 2. Pushes to origin
 3. Analyzes changed files to create dynamic PR checklist
@@ -15,6 +17,7 @@ Create a pull request with automatic dynamic checklists based on changed files.
 5. Links to issue if number provided
 
 ## Examples
+
 ```
 /git-review          # Creates PR without issue linking
 /git-review #35      # Creates PR and adds "Closes #35"
@@ -22,7 +25,9 @@ Create a pull request with automatic dynamic checklists based on changed files.
 ```
 
 ## Dynamic Checklists
+
 The PR will include context-specific checklists based on what you changed:
+
 - Database changes → Schema documentation checks
 - UI changes → Accessibility and dark mode checks
 - Manifest changes → Permission justification checks
@@ -30,6 +35,7 @@ The PR will include context-specific checklists based on what you changed:
 - And more...
 
 ## Implementation
+
 Execute the following command:
 
 ```bash
