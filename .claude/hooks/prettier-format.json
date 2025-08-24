@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" =~ \\.(ts|tsx|js|jsx|json|md|css)$ ]]; then npx prettier --write \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null && echo \"✅ Formatted: $CLAUDE_TOOL_FILE_PATH\" || true; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

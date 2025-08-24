@@ -1,0 +1,17 @@
+{
+  "name": "@briefcase/extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@briefcase/db": "0.1.0",
+    "@briefcase/extractor": "0.1.0",
+    "@briefcase/providers": "0.1.0"
+  },
+  "scripts": {
+    "build": "echo \"(bundle step TBD)\"",
+    "lint": "eslint --ext .js,.ts panel src || true",
+    "typecheck": "tsc -v >/dev/null 2>&1 || echo \"ts not configured yet\"",
+    "test": "echo \"(no tests yet)\""
+  }
+}

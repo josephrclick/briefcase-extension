@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.build/
+.eslintcache
+*.log
+.DS_Store
+.envrc
+.env
+.env.local
+.env.*.local
+*.db
+*.db-shm
+*.db-wal
+_archive/

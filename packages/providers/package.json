@@ -1,0 +1,13 @@
+{
+  "name": "@briefcase/providers",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "build": "echo ok",
+    "lint": "eslint --ext .ts . || true",
+    "typecheck": "echo ok",
+    "test": "echo \"(no tests yet)\""
+  }
+}
