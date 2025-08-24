@@ -61,7 +61,7 @@ The project is a **monorepo** managed with `npm` workspaces. This structure sepa
 ### Version Control
 
 - **Branching Strategy**: TBD (e.g., GitFlow, Trunk-Based). For now, feature branches off `main`.
-- **Commit Messages**: **Conventional Commits** (`feat:`, `fix:`, `docs:`, etc.).
+- **Commit Messages**: **Conventional Commits** (`feat:`, `fix:`, `docs:`, `wip:`, `refactor:`, `test:`, `chore:`, etc.).
   - _Rationale_: Clear, machine-readable commit history is essential for automated changelog generation and versioning.
 
 This document is living and should be updated as architectural decisions are made or new dependencies are introduced.

@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/josephrclick/briefcase-extension/blob/main/README.md
+    about: Check the documentation for usage and configuration
+  - name: Discussions
+    url: https://github.com/josephrclick/briefcase-extension/discussions
+    about: Ask questions and discuss ideas with the community

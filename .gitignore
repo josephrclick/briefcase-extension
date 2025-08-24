@@ -12,3 +12,4 @@ dist/
 *.db-shm
 *.db-wal
 _archive/
+.husky/

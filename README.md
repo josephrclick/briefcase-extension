@@ -1,6 +1,6 @@
 # Briefcase
 
-A pinned side-panel extension that extracts the main content of the current page and produces a tailored summary. Save time, build judgment about model quality, and quietly grow a searchable personal library.
+A browser extension that extracts the main content of the current page and produces summary tailored to your preferences.
 
 - **Local-first & private.** Raw extracted text lives in a local SQLite (WASM) + FTS database. Summaries save to disk as `.md` or `.txt`. No telemetry.
 - **Adjustable outputs.** Tailor summaries by length (brief/medium/verbose), comprehension level (Kinder/HS/College/PhD), and style (plain, bullets, executive).

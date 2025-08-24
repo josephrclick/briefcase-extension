@@ -16,6 +16,8 @@
     "format:fix": "prettier -w ."
   },
   "devDependencies": {
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.34.0",
     "@types/chrome": "0.1.4",
@@ -23,6 +25,7 @@
     "@typescript-eslint/parser": "8.40.0",
     "eslint": "^9.9.0",
     "globals": "16.3.0",
+    "husky": "9.1.7",
     "prettier": "^3.3.3",
     "typescript": "^5.5.4"
   },

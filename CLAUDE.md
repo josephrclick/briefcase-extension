@@ -47,7 +47,28 @@ npm run format:fix
 
 ## Custom Claude Code Commands
 
-The following project-specific commands are available:
+### Git Workflow Commands
+
+**Automated Git workflow with trigger phrases:**
+
+- **`git-start <description>`** - Start a new feature branch
+  - Updates main branch
+  - Creates feature branch with kebab-case naming
+  - Pushes branch to origin
+- **`git-save`** or **`git-checkpoint`** - Quick WIP commit
+  - Stages all changes
+  - Creates checkpoint commit with descriptive message
+  - Pushes to current branch
+- **`git-review [#issue]`** - Create pull request
+  - Commits final changes
+  - Creates PR targeting main branch
+  - Links to issue if number provided (e.g., `git-review #35`)
+- **`git-status`** - Check PR and CI status
+  - Shows current PRs
+  - Lists recent CI runs
+  - Displays failed run details if any
+
+### Project-Specific Commands
 
 - `/build-extension` - Build the Chrome extension for production
 - `/test-all` - Run complete test suite including unit and E2E tests
@@ -90,7 +111,7 @@ All providers implement the `LLMProvider` interface in `packages/providers/index
 - TypeScript for all new code
 - Functional components with React hooks
 - CSS Variables for theming (`--accent`, `--accent-warm`)
-- Conventional Commits (feat:, fix:, docs:)
+- Conventional Commits (feat:, fix:, docs:, wip:, refactor:, test:, chore:)
 - No telemetry or analytics code
 
 ## Security Considerations
@@ -107,8 +128,7 @@ All providers implement the `LLMProvider` interface in `packages/providers/index
 The following hooks are configured in `.claude/settings.json`:
 
 1. **File Protection** - Prevents editing sensitive files (`.env`, `package-lock.json`, PRD, etc.)
-2. **Prettier Formatting** - Auto-formats JS/TS/JSON/MD/CSS files after edits
-3. **Bash Validation** - Enforces best practices (use `rg` instead of `grep`, etc.)
+2. **Bash Validation** - Enforces best practices (use `rg` instead of `grep`, etc.)
 
 ### Permissions
 
@@ -132,29 +152,32 @@ To customize your local environment, copy `.claude/settings.local.json.template`
 
 ## Work Log
 
-### 2025-08-24 - Initial Setup & Environment Configuration
+### 2025-08-24 - Initial Setup & GitHub Actions Configuration
 
 - Created CLAUDE.md with project overview and development guidelines
 - Established PRD as source of truth for architecture decisions
 - Set up work log process for continuity between coding sessions
 - Created comprehensive Claude Code setup script (`.claude/setup.sh`) with:
-  - Prettier auto-formatting hooks for all code files
   - File protection to prevent editing sensitive files
   - Bash command validation to enforce best practices
   - Project-specific commands for common tasks
   - Proper permissions configuration
-- Successfully configured Claude Code environment with all hooks and commands
-- Fixed shell compatibility issue in prettier hook (moved to separate script)
-- Documented all custom commands and environment settings in CLAUDE.md
 - **Resolved ESLint configuration issues**:
   - Installed TypeScript ESLint parser and plugin
   - Created root `tsconfig.json` with proper TypeScript configuration
   - Created ESLint flat config (`eslint.config.js`) with Chrome API globals
   - Added package-specific tsconfig files for each workspace
   - All major lint errors resolved (Chrome API recognition, TypeScript parsing)
-- **Known issues**:
-  - Prettier hook syntax error needs fixing (shell compatibility)
-  - Minor code quality warnings remain (unused params, any type)
+- **Implemented complete GitHub Actions setup**:
+  - Created issue templates (bug report, feature request) and PR template
+  - Configured Claude workflow with concurrency controls, max_turns, and Chrome extension-specific settings
+  - Set up Claude code review workflow with sticky comments and security hardening for fork PRs
+  - Created comprehensive CI/CD pipeline with build, test, lint, and security checks
+  - Configured conventional commits with commitlint and husky
+  - Created release workflow for Chrome Web Store deployment
+  - Added CONTRIBUTING.md with detailed contribution guidelines
+  - Created CODEOWNERS file for automated review assignments
+- **Removed prettier hooks** due to shell compatibility issues (to be addressed separately)
 - **Next steps**: Begin implementing core extension structure per PRD specifications
   - Start with basic manifest.json setup
   - Create initial React side panel UI

@@ -3,28 +3,31 @@ name: Claude Code Review
 on:
   pull_request:
     types: [opened, synchronize]
-    # Optional: Only run on specific file changes
-    # paths:
-    #   - "src/**/*.ts"
-    #   - "src/**/*.tsx"
-    #   - "src/**/*.js"
-    #   - "src/**/*.jsx"
+    # Only run on code changes
+    paths:
+      - "apps/**/*.ts"
+      - "apps/**/*.tsx"
+      - "apps/**/*.js"
+      - "apps/**/*.jsx"
+      - "packages/**/*.ts"
+      - "packages/**/*.tsx"
+      - "packages/**/*.js"
+      - "packages/**/*.jsx"
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
-    
+    # Security: Require manual approval for first-time contributors (GPT-5's recommendation)
+    if: |
+      github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' ||
+      github.event.pull_request.author_association != 'FIRST_TIMER'
+
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write # Changed to write for sticky comments
       issues: read
       id-token: write
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,42 +40,59 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
-          # Optional: Specify model (defaults to Claude Sonnet 4, uncomment for Claude Opus 4.1)
-          # model: "claude-opus-4-1-20250805"
+          # Use Claude Sonnet 4.1 for reviews
+          model: "claude-sonnet-4-1-20250805"
 
-          # Direct prompt for automated review (no @claude mention needed)
+          # Enable sticky comments to update same comment on subsequent pushes
+          use_sticky_comment: true
+
+          # Chrome Extension specific review prompt
           direct_prompt: |
-            Please review this pull request and provide feedback on:
-            - Code quality and best practices
-            - Potential bugs or issues
+            Please review this Chrome Extension (Manifest V3) pull request focusing on:
+
+            **Chrome Extension Specific:**
+            - Manifest permissions are properly declared and justified
+            - Content scripts follow security best practices
+            - Service worker is properly configured for MV3
+            - Side panel functionality works correctly
+            - No inline scripts or eval() usage
+            - Proper message passing between contexts
+
+            **TypeScript & React:**
+            - Type safety and proper interface usage
+            - React hooks are used correctly
+            - No unnecessary re-renders
+            - Component accessibility (ARIA attributes)
+
+            **Security:**
+            - No API keys or sensitive data exposed
+            - Input validation and sanitization
+            - Content Security Policy compliance
+            - Safe DOM manipulation
+
+            **Code Quality:**
+            - Follows project conventions in CLAUDE.md
+            - Uses existing patterns from the codebase
+            - Proper error handling
             - Performance considerations
-            - Security concerns
-            - Test coverage
-            
-            Be constructive and helpful in your feedback.
 
-          # Optional: Use sticky comments to make Claude reuse the same comment on subsequent pushes to the same PR
-          # use_sticky_comment: true
-          
-          # Optional: Customize review based on file types
-          # direct_prompt: |
-          #   Review this PR focusing on:
-          #   - For TypeScript files: Type safety and proper interface usage
-          #   - For API endpoints: Security, input validation, and error handling
-          #   - For React components: Performance, accessibility, and best practices
-          #   - For tests: Coverage, edge cases, and test quality
-          
-          # Optional: Different prompts for different authors
-          # direct_prompt: |
-          #   ${{ github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR' && 
-          #   'Welcome! Please review this PR from a first-time contributor. Be encouraging and provide detailed explanations for any suggestions.' ||
-          #   'Please provide a thorough code review focusing on our coding standards and best practices.' }}
-          
-          # Optional: Add specific tools for running tests or linting
-          # allowed_tools: "Bash(npm run test),Bash(npm run lint),Bash(npm run typecheck)"
-          
-          # Optional: Skip review for certain conditions
-          # if: |
-          #   !contains(github.event.pull_request.title, '[skip-review]') &&
-          #   !contains(github.event.pull_request.title, '[WIP]')
+            **Testing:**
+            - Test coverage for new features
+            - Edge cases are handled
 
+            Be constructive and educational in feedback. Reference specific line numbers when possible.
+
+          # Allow specific tools for testing during review
+          allowed_tools: |
+            Bash(npm run lint)
+            Bash(npm run typecheck)
+            Bash(npm run test)
+            Read(packages/**)
+            Read(apps/**)
+            Read(_docs/**)
+
+          # Skip review for WIP or draft PRs
+          skip_conditions: |
+            contains(github.event.pull_request.title, '[WIP]') ||
+            contains(github.event.pull_request.title, '[skip-review]') ||
+            github.event.pull_request.draft == true

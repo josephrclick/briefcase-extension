@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Check formatting
+        run: npx prettier --check "**/*.{js,jsx,ts,tsx,json,md,css}"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test
+        continue-on-error: true # Tests may not be implemented yet
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: coverage/
+          retention-days: 7
+
+  build-extension:
+    name: Build Chrome Extension
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Validate manifest.json
+        run: |
+          echo "Validating Chrome Extension manifest..."
+          node -e "
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('./apps/extension/manifest.json', 'utf8'));
+
+          // Check required fields
+          const required = ['manifest_version', 'name', 'version', 'description'];
+          const missing = required.filter(field => !manifest[field]);
+
+          if (missing.length > 0) {
+            console.error('Missing required fields:', missing);
+            process.exit(1);
+          }
+
+          // Check manifest version
+          if (manifest.manifest_version !== 3) {
+            console.error('Must use Manifest V3');
+            process.exit(1);
+          }
+
+          // Check permissions are arrays
+          if (manifest.permissions && !Array.isArray(manifest.permissions)) {
+            console.error('Permissions must be an array');
+            process.exit(1);
+          }
+
+          console.log('✅ Manifest validation passed');
+          "
+
+      - name: Check extension size
+        run: |
+          echo "Checking extension size..."
+          size=$(du -sb apps/extension | cut -f1)
+          max_size=$((10 * 1024 * 1024))  # 10MB limit
+
+          if [ $size -gt $max_size ]; then
+            echo "❌ Extension size ($size bytes) exceeds 10MB limit"
+            exit 1
+          else
+            echo "✅ Extension size: $(($size / 1024))KB"
+          fi
+
+      - name: Create extension ZIP
+        run: |
+          cd apps/extension
+          zip -r ../../briefcase-extension.zip . \
+            -x "*.DS_Store" \
+            -x "__MACOSX/*" \
+            -x "node_modules/*" \
+            -x ".git/*"
+          cd ../..
+          echo "✅ Created briefcase-extension.zip"
+
+      - name: Upload extension artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension
+          path: briefcase-extension.zip
+          retention-days: 30
+
+  security-check:
+    name: Security Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit
+        run: npm audit --audit-level=high
+        continue-on-error: true # Don't fail build on vulnerabilities
+
+      - name: Check for sensitive data
+        run: |
+          echo "Checking for potential secrets..."
+
+          # Check for common API key patterns
+          if grep -r -E "(api[_-]?key|apikey|api[_-]?secret|token|password|pwd|passwd|secret[_-]?key|private[_-]?key)" \
+               --include="*.js" --include="*.ts" --include="*.jsx" --include="*.tsx" \
+               --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null | \
+               grep -v -E "(// |/\*|\* |interface |type |const |let |var |function |class |import |export |throw |console|Error|test|describe|it\()" | \
+               grep -i -E "=\s*['\"][^'\"]{20,}['\"]"; then
+            echo "⚠️  Warning: Potential secrets found in code. Please review."
+          else
+            echo "✅ No obvious secrets detected"
+          fi
+
+  # Summary job to ensure all checks pass
+  ci-success:
+    name: CI Success
+    if: always()
+    needs: [lint-and-typecheck, test, build-extension, security-check]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check CI Status
+        run: |
+          if [ "${{ needs.lint-and-typecheck.result }}" != "success" ] || \
+             [ "${{ needs.build-extension.result }}" != "success" ]; then
+            echo "❌ CI checks failed"
+            exit 1
+          fi
+          echo "✅ All CI checks passed"
