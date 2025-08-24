@@ -45,7 +45,17 @@
         ]
       }
     ],
-    "PostToolUse": []
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prettier-format.sh"
+          }
+        ]
+      }
+    ]
   },
   "includeCoAuthoredBy": true,
   "cleanupPeriodDays": 30

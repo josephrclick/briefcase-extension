@@ -183,3 +183,33 @@ To customize your local environment, copy `.claude/settings.local.json.template`
   - Create initial React side panel UI
   - Set up SQLite WASM package
   - Implement Readability.js extraction
+
+### 2025-08-24 (Part 2) - Git Workflow Automation & Prettier Hook
+
+- **Enhanced Git Workflow Automation**:
+  - Integrated Git workflow commands from previous project (git-start, git-save, git-review, git-status)
+  - Created main workflow script (`.claude/commands/git-workflow.sh`) with safety rules
+  - Updated to use `main` branch only (removed references to `dev` branch)
+  - **Enhanced git-review with dynamic PR checklists**:
+    - Analyzes changed files to generate context-specific checklists
+    - Adds relevant checks for database, UI, manifest, TypeScript, dependencies
+    - Shows file count and affected project areas
+    - Automatic issue linking with `git-review #issue`
+  - Converted Git commands from .sh to .md format for Claude Code slash commands
+  - Added 'wip' as valid commit type in commitlint configuration
+  - Created comprehensive documentation in `.claude/GIT_WORKFLOW.md`
+
+- **Fixed Prettier Formatting Hook** (Issue #2):
+  - Created POSIX-compliant prettier formatting script (`.claude/hooks/prettier-format.sh`)
+  - Configured PostToolUse hook in `.claude/settings.json` for Edit/Write/MultiEdit operations
+  - Successfully tested with JavaScript and JSON files
+  - Created PR #3 demonstrating complete GitHub Actions workflow
+  - Resolves previous shell syntax errors with proper POSIX compliance
+
+- **Current Branch**: `feat/prettier-hook` - Ready for review with PR #3
+
+- **Next steps**:
+  - Merge prettier hook PR once CI passes
+  - Begin implementing core extension structure per PRD specifications
+  - Start with basic manifest.json setup
+  - Create initial React side panel UI
