@@ -13,7 +13,9 @@
     "typecheck": "npm run -ws typecheck",
     "test": "npm run -ws test",
     "format": "prettier -c .",
-    "format:fix": "prettier -w ."
+    "format:fix": "prettier -w .",
+    "prune:worklog": "node .claude/scripts/prune-worklog.js",
+    "prune:worklog:dry": "node .claude/scripts/prune-worklog.js --dry-run"
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",
