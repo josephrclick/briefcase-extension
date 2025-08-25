@@ -31,27 +31,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/validate-bash.py"
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/PreToolUse/bash_validator.py"
           }
         ]
       },
       {
-        "matcher": "Edit|MultiEdit|Write",
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 -c \"import json, sys; data=json.load(sys.stdin); path=data.get('tool_input',{}).get('file_path',''); sys.exit(2 if any(p in path for p in ['.env', 'package-lock.json', '.git/', 'node_modules/', '_docs/PRD.md']) else 0)\""
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/PreToolUse/file_protection.py"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
-        "matcher": "Edit|MultiEdit|Write",
+        "matcher": "Edit|MultiEdit|Write|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/prettier-format.sh"
+            "command": "python3 $CLAUDE_PROJECT_DIR/.claude/hooks/PostToolUse/prettier_format.py"
           }
         ]
       }
