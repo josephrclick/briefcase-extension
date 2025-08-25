@@ -1,6 +1,8 @@
 module.exports = {
   extends: ["@commitlint/config-conventional"],
   rules: {
+    "type-empty": [0, "always"],
+    "subject-empty": [0, "always"],
     "type-enum": [
       2,
       "always",
@@ -35,7 +37,6 @@ module.exports = {
       ],
     ],
     "subject-case": [2, "always", "lower-case"],
-    "subject-empty": [2, "never"],
     "subject-full-stop": [2, "never", "."],
     "body-max-line-length": [2, "always", 100],
     "header-max-length": [2, "always", 72],
