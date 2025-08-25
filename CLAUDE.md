@@ -158,7 +158,7 @@ To customize your local environment, copy `.claude/settings.local.json.template`
 
 ## Work Log
 
-**Current Branch**: `feat/refactor-hooks-hierarchical-structure-issue-10`
+**Current Branch**: `feat/feat-consolidate-github-workflows-issue-11`
 
 ---
 
