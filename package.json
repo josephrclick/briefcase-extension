@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "format:fix": "prettier -w .",
     "prune:worklog": "node .claude/scripts/prune-worklog.js",
-    "prune:worklog:dry": "node .claude/scripts/prune-worklog.js --dry-run"
+    "prune:worklog:dry": "node .claude/scripts/prune-worklog.js --dry-run",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@commitlint/cli": "19.8.1",
@@ -29,6 +30,7 @@
     "eslint": "9.9.0",
     "globals": "16.3.0",
     "husky": "9.1.7",
+    "lint-staged": "16.1.5",
     "prettier": "3.3.3",
     "typescript": "5.5.4"
   },
