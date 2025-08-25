@@ -18,6 +18,7 @@ CLAUDE.md now includes a structured "Current Branch" indicator:
 ---
 
 ### Date - Work Entry
+
 ...
 ```
 
@@ -34,11 +35,11 @@ This fixed format enables reliable automated updates.
 
 The git workflow commands automatically update the work log:
 
-| Command | Work Log Update |
-|---------|----------------|
-| `git-start <description>` | Sets current branch to new feature branch |
-| `git-switch <branch>` | Updates current branch when switching |
-| `git-review [#issue]` | Adds work log entry for PR, resets to main |
+| Command                   | Work Log Update                            |
+| ------------------------- | ------------------------------------------ |
+| `git-start <description>` | Sets current branch to new feature branch  |
+| `git-switch <branch>`     | Updates current branch when switching      |
+| `git-review [#issue]`     | Adds work log entry for PR, resets to main |
 
 ## How It Works
 
@@ -131,6 +132,7 @@ Add the following structure to CLAUDE.md under the Work Log heading:
 ### Updates Not Occurring
 
 Ensure you're using the workflow commands:
+
 - Use `git-switch` instead of `git checkout`
 - Use `git-start` instead of manually creating branches
 - Use `git-review` to create PRs

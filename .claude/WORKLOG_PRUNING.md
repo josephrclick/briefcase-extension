@@ -73,10 +73,12 @@ Edit `.claude/scripts/prune-worklog.js` to adjust:
 ## Best Practices
 
 1. **Before Pruning**:
+
    - Commit any uncommitted work log changes
    - Review what will be archived with `--dry-run`
 
 2. **After Pruning**:
+
    - Verify CLAUDE.md still contains recent work
    - Check that archives were created successfully
    - Commit the changes with a descriptive message
