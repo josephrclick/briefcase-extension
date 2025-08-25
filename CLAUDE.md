@@ -125,10 +125,14 @@ All providers implement the `LLMProvider` interface in `packages/providers/index
 
 ### Automated Hooks
 
-The following hooks are configured in `.claude/settings.json`:
+The project uses a hierarchical Python-based hook system for enhanced reliability and maintainability. See [.claude/HOOKS_DOCUMENTATION.md](.claude/HOOKS_DOCUMENTATION.md) for complete documentation.
 
-1. **File Protection** - Prevents editing sensitive files (`.env`, `package-lock.json`, PRD, etc.)
-2. **Bash Validation** - Enforces best practices (use `rg` instead of `grep`, etc.)
+**Active Hooks:**
+
+1. **File Protection** (`PreToolUse/file_protection.py`) - Prevents editing sensitive files
+2. **Bash Validation** (`PreToolUse/bash_validator.py`) - Enforces safety and best practices
+3. **Prettier Formatting** (`PostToolUse/prettier_format.py`) - Auto-formats modified files
+4. **Prompt Modifiers** (`UserPromptSubmit/*.py`) - Adds instructions based on prompt suffixes
 
 ### Permissions
 
@@ -154,7 +158,7 @@ To customize your local environment, copy `.claude/settings.local.json.template`
 
 ## Work Log
 
-**Current Branch**: `feat/setup-pre-commit-hooks-with-husky-and-lint-staged-issue-8`
+**Current Branch**: `feat/refactor-hooks-hierarchical-structure-issue-10`
 
 ---
 
