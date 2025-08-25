@@ -44,6 +44,26 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
+  validate-workflows:
+    name: Validate GitHub Actions Workflows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install actionlint
+        run: |
+          echo "Installing actionlint..."
+          bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          echo "${PWD}" >> $GITHUB_PATH
+
+      - name: Validate all workflow files
+        run: |
+          echo "Validating GitHub Actions workflow files..."
+          actionlint -verbose
+          echo "✅ All workflow files are valid"
+
   test:
     name: Test
     runs-on: ubuntu-latest
@@ -196,13 +216,14 @@ jobs:
   ci-success:
     name: CI Success
     if: always()
-    needs: [lint-and-typecheck, test, build-extension, security-check]
+    needs: [lint-and-typecheck, validate-workflows, test, build-extension, security-check]
     runs-on: ubuntu-latest
 
     steps:
       - name: Check CI Status
         run: |
           if [ "${{ needs.lint-and-typecheck.result }}" != "success" ] || \
+             [ "${{ needs.validate-workflows.result }}" != "success" ] || \
              [ "${{ needs.build-extension.result }}" != "success" ]; then
             echo "❌ CI checks failed"
             exit 1
