@@ -8,6 +8,9 @@
     "build": "echo ok",
     "lint": "eslint --ext .ts . || true",
     "typecheck": "echo ok",
-    "test": "echo \"(no tests yet)\""
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mozilla/readability": "0.6.0"
   }
 }

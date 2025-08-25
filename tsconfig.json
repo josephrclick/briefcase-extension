@@ -29,6 +29,13 @@
     },
     "types": ["chrome"]
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx"],
-  "exclude": ["node_modules", "**/dist", "**/build", "**/*.spec.ts", "**/*.test.ts"]
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "vitest.config.ts",
+    "**/*.test.ts"
+  ],
+  "exclude": ["node_modules", "**/dist", "**/build"]
 }
