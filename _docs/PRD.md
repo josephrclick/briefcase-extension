@@ -43,6 +43,7 @@
 1. Open side panel → **Summarize**.
 2. Controls: **Length** (brief/medium/verbose), **Level** (Kinder/HS/College/PhD), **Style** (plain, bullets, exec).
 3. Press **Summarize** → output shows:
+
    - **Key points**, **TL;DR**, **source anchors** (inline links back to DOM when available).
    - **Save**: writes summary to disk (`.md` or `.txt`); DB stores metadata + raw text.
 
@@ -58,28 +59,34 @@
 ## 6) Functional requirements
 
 - **Content extraction**
+
   - Auto-detect main article body; strip nav/ads.
   - Preserve headings, paragraphs, lists, links; capture canonical URL + title.
   - Fallback: user can select text and “Summarize selection.”
 
 - **Summarization**
+
   - Prompt template takes `{length, level, style}` and **page context** (cleaned text + source URL).
   - Provide **source anchors** when mapping back to DOM is feasible (by paragraph index/hash).
 
 - **A/B compare**
+
   - Same prompt & inputs for both models; render results side-by-side.
   - Scoring: coverage/readability/faithfulness (boolean toggles) + 140-char note.
 
 - **Storage**
+
   - **SQLite (WASM) + FTS** in OPFS; holds **raw text**, metadata, and A/B results.
   - Summaries saved to disk as `.md` or `.txt` in a user-chosen **Library folder** (see File System Access below).
   - v1.2: add `.json` export alongside file, and optional Google Drive upload.
 
 - **Privacy & modes**
+
   - Default **Local-first**: no data leaves the device unless user selects a cloud model.
   - When cloud model selected, show a **banner**: provider name + “content will be sent.”
 
 - **Settings**
+
   - Default summary format; file extension (`.md`/`.txt`); chosen Library folder; model defaults; per-site disable.
 
 - **Accessibility**
@@ -271,18 +278,22 @@ Content (cleaned):
 ### A) Spikes (time-boxed)
 
 1. **SQLite WASM + FTS in MV3**
+
    - POC: create OPFS-backed DB, FTS5 table, insert 50k-char text, run queries.
    - Deliver: tiny demo + perf notes + migration pattern.
 
 2. **File System Access flow**
+
    - POC: request folder handle from side panel, persist, write markdown; simulate permission revoke and recovery.
    - Deliver: API wrapper with error taxonomy.
 
 3. **Extractor bake-off**
+
    - Compare Readability.js vs heuristic blend on 20 URLs (news/docs/blogs).
    - Deliver: scores for coverage/cleanliness; choose default.
 
 4. **Model adapter shape**
+
    - Implement two adapters: one cloud (e.g., OpenAI/Anthropic/Gemini\*) and one local (Ollama).
    - Deliver: streaming to UI; unified error interface; token/latency stats (local UI only).
 

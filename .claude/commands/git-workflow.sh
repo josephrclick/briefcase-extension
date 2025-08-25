@@ -43,6 +43,9 @@ case "$1" in
         echo "3. Pushing branch to origin..."
         git push -u origin "$branch_name"
         
+        echo "4. Updating CLAUDE.md work log..."
+        .claude/scripts/update-worklog.sh set-branch "$branch_name"
+        
         echo -e "${GREEN}✓ Feature branch '$branch_name' created and ready!${NC}"
         echo -e "${YELLOW}Next steps:${NC}"
         echo "  - Make your changes"
@@ -259,14 +262,39 @@ ${checklist:-No specific checks needed for these changes.}
 Closes #$issue_number"
         fi
         
-        # Create the PR
-        gh pr create \
+        # Create the PR and capture the URL
+        echo "4. Creating pull request..."
+        pr_url=$(gh pr create \
             --base "$base_branch" \
             --title "feat: $feature_name" \
-            --body "$pr_body" \
-            --web
+            --body "$pr_body")
+        
+        # Open in web browser
+        gh pr view --web "$pr_url"
+        
+        echo "5. Updating CLAUDE.md work log..."
+        .claude/scripts/update-worklog.sh add-entry "$feature_name" "$pr_url" "$current"
+        .claude/scripts/update-worklog.sh set-branch "main"
         
         echo -e "${GREEN}✓ Pull request created with dynamic checklist based on ${file_count} changed files!${NC}"
+        echo -e "${GREEN}✓ Work log updated and branch reset to main.${NC}"
+        ;;
+        
+    "switch"|"checkout")
+        branch_name="$2"
+        if [ -z "$branch_name" ]; then
+            echo -e "${RED}Error: Please provide a branch name to switch to.${NC}"
+            echo "Usage: git-switch <branch-name>"
+            exit 1
+        fi
+
+        echo -e "${BLUE}Switching to branch '$branch_name'...${NC}"
+        git checkout "$branch_name"
+        
+        echo -e "${BLUE}Updating CLAUDE.md work log...${NC}"
+        .claude/scripts/update-worklog.sh set-branch "$branch_name"
+
+        echo -e "${GREEN}✓ Switched to branch '$branch_name' and updated work log.${NC}"
         ;;
         
     "status")
@@ -291,6 +319,7 @@ Closes #$issue_number"
         echo "  git-start <description>  - Start new feature branch"
         echo "  git-save/git-checkpoint  - Quick WIP commit and push"
         echo "  git-review [#issue]      - Finalize and create PR"
+        echo "  git-switch <branch>      - Switch branches and update work log"
         echo "  git-status               - Show PR and CI status"
         exit 1
         ;;

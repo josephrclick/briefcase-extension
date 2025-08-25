@@ -10,6 +10,7 @@ This project uses automated Git workflows triggered by specific commands. These 
 | `git-save`                | Quick checkpoint commit  | `git-save`                      |
 | `git-checkpoint`          | Alias for git-save       | `git-checkpoint`                |
 | `git-review [#issue]`     | Create PR                | `git-review #35`                |
+| `git-switch <branch>`     | Switch branches          | `git-switch main`               |
 | `git-status`              | Check PR/CI status       | `git-status`                    |
 
 ## Detailed Commands
@@ -72,6 +73,24 @@ git-review [#issue-number]
 git-review          # Creates PR without issue linking
 'git-review #35'    # Creates PR and adds "Closes #35"
 git-review 35       # Also works without #
+```
+
+### Switching Branches: `git-switch`
+
+```bash
+git-switch <branch-name>
+```
+
+**What it does:**
+
+1. Switches to the specified branch
+2. Updates CLAUDE.md work log with current branch
+
+**Example:**
+
+```bash
+git-switch main
+git-switch feat/dark-mode
 ```
 
 ### Checking Status: `git-status`

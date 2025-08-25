@@ -74,6 +74,7 @@ _adjusts pocket protector_
 ## 🚀 Installation Instructions (Even I Can Follow These!)
 
 1. **Mission Briefing**: Clone this repository
+
    - (That's computer-speak for "make a copy")
 
 2. **Gather Supplies**:
@@ -85,10 +86,12 @@ _adjusts pocket protector_
    - (I don't know what npm stands for, but it's not "Nice People Matter" like I originally thought)
 
 3. **Go Undercover**:
+
    - Open Chrome and navigate to `chrome://extensions`
    - Turn on "Developer mode" (It makes you feel important!)
 
 4. **Deploy Agent Briefcase**:
+
    - Click "Load unpacked"
    - Select the `apps/extension/dist` folder
    - (If you can't find it, look harder. It's there. I checked. Twice.)
