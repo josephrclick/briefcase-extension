@@ -1,0 +1,90 @@
+name: Verify Work Log
+
+on:
+  pull_request:
+    paths:
+      - 'CLAUDE.md'
+      - '.claude/scripts/update-worklog.sh'
+      - '.claude/commands/git-workflow.sh'
+  push:
+    branches:
+      - main
+
+jobs:
+  verify-worklog:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Verify work log structure
+        run: |
+          echo "Checking CLAUDE.md work log structure..."
+          
+          # Check for Work Log section
+          if ! grep -q "^## Work Log" CLAUDE.md; then
+            echo "❌ Error: Work Log section not found in CLAUDE.md"
+            exit 1
+          fi
+          
+          # Check for Current Branch line
+          if ! grep -q "^\*\*Current Branch\*\*:" CLAUDE.md; then
+            echo "❌ Error: Current Branch indicator not found in CLAUDE.md"
+            echo "Please add '**Current Branch**: \`branch-name\`' under the Work Log heading"
+            exit 1
+          fi
+          
+          echo "✅ Work log structure is valid"
+      
+      - name: Verify update script is executable
+        run: |
+          if [ -f .claude/scripts/update-worklog.sh ]; then
+            if [ ! -x .claude/scripts/update-worklog.sh ]; then
+              echo "❌ Error: update-worklog.sh is not executable"
+              echo "Run: chmod +x .claude/scripts/update-worklog.sh"
+              exit 1
+            fi
+            echo "✅ Update script is executable"
+          else
+            echo "⚠️ Warning: update-worklog.sh not found"
+          fi
+      
+      - name: Test work log update (dry run)
+        run: |
+          # Create a backup
+          cp CLAUDE.md CLAUDE.md.bak
+          
+          # Test branch update
+          echo "Testing branch update..."
+          if .claude/scripts/update-worklog.sh set-branch "test-branch"; then
+            echo "✅ Branch update successful"
+            
+            # Verify the update
+            if grep -q "^\*\*Current Branch\*\*: \`test-branch\`" CLAUDE.md; then
+              echo "✅ Branch update verified in file"
+            else
+              echo "❌ Error: Branch update did not modify file correctly"
+              exit 1
+            fi
+          else
+            echo "❌ Error: Branch update failed"
+            exit 1
+          fi
+          
+          # Restore original
+          mv CLAUDE.md.bak CLAUDE.md
+          echo "✅ All work log tests passed"
+      
+      - name: Check for recent work log entries
+        if: github.event_name == 'pull_request'
+        run: |
+          # Count work log entries from the last 30 days
+          entries=$(grep -c "^### 2025-" CLAUDE.md || echo "0")
+          
+          if [ "$entries" -eq 0 ]; then
+            echo "⚠️ Warning: No recent work log entries found"
+            echo "Consider adding a work log entry for this PR"
+          else
+            echo "✅ Found $entries recent work log entries"
+          fi
