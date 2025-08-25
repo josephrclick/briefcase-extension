@@ -1,7 +1,7 @@
 # Archived Work Log - 2025-08-24 Part 1
 
-*This file contains archived work log entries from CLAUDE.md*
-*Archived on: 2025-08-24*
+_This file contains archived work log entries from CLAUDE.md_
+_Archived on: 2025-08-24_
 
 ---
 

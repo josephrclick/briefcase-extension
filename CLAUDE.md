@@ -178,6 +178,24 @@ To customize your local environment, copy `.claude/settings.local.json.template`
 
 - **Current Branch**: `feat/prettier-hook` - Ready for review with PR #3
 
+### 2025-08-25 - Work Log Pruning & Lint Fix (Issue #4)
+
+- **Implemented Work Log Pruning**:
+  - Created `.claude/scripts/prune-worklog.js` to automatically archive old work logs
+  - Established retention policy: keep 30 days in main log, archive older entries
+  - Created `.claude/WORKLOG_PRUNING.md` with detailed usage and CI integration notes
+  - Added npm scripts: `prune:worklog` and `prune:worklog:dry` for manual pruning
+  - Successfully archived initial work log entries to `.claude/archives/2025/`
+  - Created index file at `.claude/archives/INDEX.md` for navigation
+
+- **Fixed Prettier Lint Issues**:
+  - Resolved CI failures by formatting 4 files with Prettier
+  - Created `.prettierignore` to preserve archive immutability
+  - Added `format` and `format:check` npm scripts for consistency
+  - Excluded `.claude/archives/**` from Prettier checks to prevent formatting drift
+
+- **Current Branch**: `work-log-pruning` - PR #5 addressing issue #4
+
 - **Next steps**:
   - Merge prettier hook PR once CI passes
   - Begin implementing core extension structure per PRD specifications

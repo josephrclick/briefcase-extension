@@ -12,7 +12,8 @@
     "lint": "npm run -ws lint",
     "typecheck": "npm run -ws typecheck",
     "test": "npm run -ws test",
-    "format": "prettier -c .",
+    "format": "prettier --cache --write .",
+    "format:check": "prettier --check .",
     "format:fix": "prettier -w .",
     "prune:worklog": "node .claude/scripts/prune-worklog.js",
     "prune:worklog:dry": "node .claude/scripts/prune-worklog.js --dry-run"

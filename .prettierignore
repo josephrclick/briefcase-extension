@@ -1,0 +1,19 @@
+# Ignore build outputs
+dist/
+build/
+*.min.js
+*.min.css
+
+# Ignore dependencies
+node_modules/
+
+# Ignore archives to preserve historical immutability
+.claude/archives/**
+
+# Ignore coverage reports
+coverage/
+
+# Ignore lock files
+package-lock.json
+pnpm-lock.yaml
+yarn.lock

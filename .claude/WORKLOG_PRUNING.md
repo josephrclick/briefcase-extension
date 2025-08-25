@@ -40,6 +40,7 @@ npm run prune:worklog:dry
 ### When to Prune
 
 Consider pruning when:
+
 - CLAUDE.md has more than 2-3 work log sections
 - The file becomes slow to load or edit
 - Starting a new major phase of development
@@ -48,6 +49,7 @@ Consider pruning when:
 ## Archive Format
 
 Archived files follow this naming pattern:
+
 - `worklog-YYYY-MM-DD.md` - Basic date-based naming
 - `worklog-YYYY-MM-DD-description.md` - With optional description from section title
 
@@ -63,6 +65,7 @@ Example: `worklog-2025-08-24-git-workflow-automation.md`
 ## Configuration
 
 Edit `.claude/scripts/prune-worklog.js` to adjust:
+
 - `keepSections`: Number of sections to keep in CLAUDE.md (default: 2)
 - `sectionPattern`: Regex pattern for detecting section headers
 - `archivesDir`: Location of archive files
@@ -86,20 +89,24 @@ Edit `.claude/scripts/prune-worklog.js` to adjust:
 ## Troubleshooting
 
 ### Script Can't Find Work Log
+
 - Ensure CLAUDE.md contains `## Work Log` section
 - Check that sections use H3 headers (`### YYYY-MM-DD`)
 
 ### Archives Not Created
+
 - Verify `.claude/archives/` directory exists
 - Check file permissions
 - Run with `--dry-run` to see what would happen
 
 ### Manual Recovery
+
 If needed, archived content can be manually copied back to CLAUDE.md from the archive files.
 
 ## Future Enhancements
 
 Potential improvements for consideration:
+
 - Automated pruning via git hooks
 - Configurable retention period (by date instead of count)
 - Archive compression for very old entries
