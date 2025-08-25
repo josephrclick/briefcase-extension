@@ -162,6 +162,23 @@ To customize your local environment, copy `.claude/settings.local.json.template`
 
 ---
 
+### 2025-08-25 - Implement Readability.js Content Extraction (Issue #14)
+
+- **Implemented Core Content Extraction**:
+  - Added @mozilla/readability as dependency to packages/extractor
+  - Replaced basic DOM traversal with robust Readability.js implementation
+  - Properly clones DOM to avoid modifying live page content
+  - Returns ExtractedPayload with title, rawText, url, site, wordCount, and sections
+  - Handles extraction failures gracefully by returning null
+- **Added Test Infrastructure**:
+
+  - Installed vitest, @vitest/ui, and happy-dom for testing
+  - Created comprehensive unit tests covering success and failure cases
+  - Updated tsconfig.json to include test files
+  - All tests passing (4/4)
+
+- **Outcome**: Created PR [#21](https://github.com/josephrclick/briefcase-extension/pull/21) for review
+
 ### 2025-08-25 - feat consolidate github workflows issue 11
 
 - **Work Done**: Completed 'feat consolidate github workflows issue 11' on branch `feat/feat-consolidate-github-workflows-issue-11`.
