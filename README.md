@@ -1,62 +1,132 @@
-# Briefcase
+# 🕵️ Briefcase: Your Enthusiastically Incompetent Web Summarizer
 
-A browser extension that extracts the main content of the current page and produces summary tailored to your preferences.
+*Tap tap tap* 📎 
 
-- **Local-first & private.** Raw extracted text lives in a local SQLite (WASM) + FTS database. Summaries save to disk as `.md` or `.txt`. No telemetry.
-- **Adjustable outputs.** Tailor summaries by length (brief/medium/verbose), comprehension level (Kinder/HS/College/PhD), and style (plain, bullets, executive).
-- **Compare models.** Run two LLMs side-by-side and record quick human scores for coverage, readability, and faithfulness.
-- **Searchable library.** Full-text search over the raw, original content of every page you summarize.
+Oh! Hello there! I see you're trying to read a... *squints at clipboard* ...web page? A really, REALLY long one? 
 
-## How it works
+*fumbles with briefcase lock for 30 seconds*
 
-Briefcase uses a simple, robust flow to get you from a cluttered web page to a clean summary.
+Ah-ha! Got it! The name's Briefcase - Agent Briefcase. Well, technically it's just Briefcase, but I added the "Agent" part myself. Makes me sound more professional, don't you think?
 
-`DOM → Content Extractor → Cleaned Text → LLM Provider → Formatted Summary`
+I'm here to help you with those scary long articles that make your brain feel all fuzzy! I may not be the sharpest tool in the shed (I once spent three hours trying to summarize a CAPTCHA), but by golly, I'll give it my best shot!
 
-1.  The **Content Script** extracts the core text from the current page, stripping away ads, navigation, and other boilerplate.
-2.  The **Background Service Worker** sends the cleaned text to your chosen LLM provider (local or cloud) with your specified parameters.
-3.  The **Side Panel UI** (built with React) displays the summary, allowing you to save it to your local library.
-4.  The **Database Layer** (SQLite via WASM) stores the original raw text, making it searchable for later.
+## 🎯 My Mission (If I Choose to Accept It)
 
-## Tech Stack
+*pulls out reading glasses, puts them on upside down*
 
-- **Platform**: Chrome Extension Manifest V3
-- **UI**: React & TypeScript
-- **Database**: SQLite (WASM) with FTS5 for full-text search, running in-browser.
-- **Providers**: Pluggable adapters for different LLM providers (e.g., local Ollama, remote OpenAI).
+I'm a browser extension that lives in the corner of your screen, eagerly waiting to pounce on any article longer than my attention span (which, admittedly, isn't very long). When you click on me, I spring into action! Well, more like stumble into action. Sometimes I trip over the UI elements, but I always get back up!
 
-## Development Quickstart
+Think of me as that well-meaning uncle who tries to help with your homework but keeps getting distracted by his own stories. Except I'm digital. And I don't smell like mothballs.
 
-1.  Clone the repository.
-2.  Install dependencies using npm workspaces:
-    ```bash
-    npm install
-    ```
-3.  Open Chrome → `chrome://extensions`.
-4.  Enable **Developer mode**.
-5.  Click **Load unpacked** and select the `apps/extension/dist` directory (or similar build output folder).
-6.  Pin **Briefcase** to your toolbar to open the side panel.
+## 🔧 My Super-Spy Gadgetry (Patent Pending)
 
-## Roadmap
+*rummages through briefcase, pulls out rubber chicken by mistake*
 
-### v1.0 (SLC)
+Oops! Wrong pocket. Here we go:
 
-- End-to-end Summarize tab with adjustable parameters.
-- `.md` & `.txt` file saving to a user-chosen local folder.
-- SQLite + FTS persistence for raw content.
-- A/B comparison view with scoring.
+### 🤫 **Operation: Hush-Hush**
+All your secrets are safe with me! Mostly because I immediately forget everything. But also because I store everything locally in my special briefcase (it's actually a SQLite database, but "briefcase" sounds cooler). I promise I won't tell anyone about that article on "How to Train Your Pet Rock" you had me summarize last Tuesday.
 
-### v1.1
+### 🎭 **The Many Faces of Briefcase**
+Need me to explain quantum physics to a five-year-old? Or maybe translate that philosophy paper for your professor? I can change my personality faster than you can say "multiple personality disorder"! Though sometimes I mix them up and explain things to your professor like they're five. Sorry about that.
 
-- History view for past summaries.
-- Ability to re-run summaries with different settings.
-- Per-site defaults.
+### ⚔️ **Battle of the Bots**
+Watch as I pit two AI models against each other in mortal combat! (It's actually just A/B testing, but I like to imagine tiny robots fighting). You be the judge! I'll be in the corner cheering for both sides because I can't pick favorites.
 
-### v1.2
+### 📚 **The Archive of Forgotten Things**
+Every article I've ever touched gets filed away in my Archive! It's like a library, but organized by someone who doesn't understand the Dewey Decimal System. Want to find that thing you read about... you know... that thing? With the stuff? I've got it! Somewhere! Give me a minute... or thirty...
 
-- JSON export option.
-- Optional Google Drive integration for saving summaries.
+## 📋 My Foolproof* Plan (\*Fool not included)
 
-## Contributing
+Here's my patented Four-Step Process™ (patent definitely pending):
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
+```
+Web Page → My Brain → ??? → Summary!
+```
+
+Wait, let me try that again:
+
+1. **Step One: Infiltration** 🥷  
+   I sneak past all those nasty ads and pop-ups! Sometimes I get distracted by them ("Ooh, local singles in my area?"), but I usually remember what I'm doing eventually.
+
+2. **Step Two: Reading Comprehension** 📖  
+   I send the article to my friends at AI Headquarters. They're much smarter than me. I tried reading it myself once, but I kept losing my place.
+
+3. **Step Three: The Big Reveal** 🎪  
+   Ta-da! Your summary appears! It might not be perfect, but neither am I, and look how far I've gotten!
+
+4. **Step Four: Filing System** 🗂️  
+   I carefully file everything away using my proprietary system: "Stuff from Monday," "That Thing About Cats," "Article #4,827," etc.
+
+## 🛠️ Technical Specifications (For the Nerds)
+
+*adjusts pocket protector*
+
+- **Secret Base**: Chrome Extension Manifest V3 (I don't know what V1 or V2 did wrong, but apparently we don't talk about them)
+- **Disguise Department**: React & TypeScript (I keep forgetting which one is which)
+- **Filing Cabinet**: SQLite with FTS5 (FTS stands for "Find That Stuff," I think)
+- **Communication Device**: Works with Ollama, OpenAI, and others (I just push buttons until something happens)
+
+## 🚀 Installation Instructions (Even I Can Follow These!)
+
+1. **Mission Briefing**: Clone this repository
+   - (That's computer-speak for "make a copy")
+
+2. **Gather Supplies**: 
+   ```bash
+   npm install
+   ```
+   - (I don't know what npm stands for, but it's not "Nice People Matter" like I originally thought)
+
+3. **Go Undercover**: 
+   - Open Chrome and navigate to `chrome://extensions`
+   - Turn on "Developer mode" (It makes you feel important!)
+
+4. **Deploy Agent Briefcase**:
+   - Click "Load unpacked" 
+   - Select the `apps/extension/dist` folder
+   - (If you can't find it, look harder. It's there. I checked. Twice.)
+
+5. **Pin Your Badge**:
+   - Find my icon in your toolbar
+   - Pin me so I don't get lost!
+   - I promise not to pop up at inappropriate times (much)
+
+## 🗓️ Future Operations (Subject to My Remembering)
+
+### ✅ **v1.0 - Operation: Basic Competence**
+Current mission! I can summarize, save files, and maintain a database! Sometimes all at once!
+
+### 🔄 **v1.1 - Operation: Second Chances**
+Because sometimes I mess up the first time. This update will let you re-run summaries with different instructions. "No, Briefcase, SHORTER!"
+
+### 📤 **v1.2 - Operation: Sharing is Caring**
+I'll learn how to export to JSON and maybe even send things to Google Drive! (Currently, I can barely find my own files, so this might take a while.)
+
+## 🐛 Found a Bug? (It Was Probably Me)
+
+Did I mess something up? Color me surprised! But seriously, if you find any issues or have ideas for making me less... me... please feel free to:
+
+- Open an issue (I promise to read it... eventually)
+- Submit a pull request (I'll try not to merge it backwards)
+- Send a carrier pigeon (I'm still learning GitHub)
+
+## 🏆 Final Thoughts from Agent Briefcase
+
+Look, I know I'm not the smartest AI assistant out there. I'm not even the smartest assistant in this browser. But what I lack in intelligence, I make up for in enthusiasm! And determination! And... well, that's about it, actually.
+
+But here's the thing: I WILL summarize your article. It might take me a few tries. I might get distracted by a particularly interesting advertisement. I might accidentally summarize the cookie policy instead of the main article (it happened ONCE, okay?). But eventually, I'll get you that summary!
+
+Because that's what heroes do. Even the bumbling, slightly confused ones.
+
+---
+
+*P.S. - If you see me spinning in circles in the corner of your browser, just give me a gentle click. Sometimes I forget what I'm doing.*
+
+*P.P.S. - I just learned what P.S. stands for! It's "Post Script"! I thought it was "Please Stop." That explains a lot of confused emails...*
+
+*P.P.P.S. - Is there a limit to these? Asking for a friend.*
+
+---
+
+**Briefcase™** - *"I'm helping!"* 📎
