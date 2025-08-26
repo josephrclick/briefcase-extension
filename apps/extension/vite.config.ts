@@ -5,6 +5,7 @@ import manifest from "./manifest.json";
 
 export default defineConfig({
   plugins: [react(), crx({ manifest })],
+  base: "./",
   build: {
     outDir: "dist",
     rollupOptions: {
