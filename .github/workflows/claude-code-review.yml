@@ -45,8 +45,8 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 
-          # Use Claude Sonnet 4.1 for reviews
-          model: "claude-sonnet-4-1-20250805"
+          # Use Claude Sonnet 3.5 for reviews
+          model: "claude-3-5-sonnet-20241022"
 
           # Enable sticky comments to update same comment on subsequent pushes
           use_sticky_comment: true
