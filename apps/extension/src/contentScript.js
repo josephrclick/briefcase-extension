@@ -1,3 +1,5 @@
+/* global performance */
+
 (() => {
   console.debug("Briefcase content script loaded.");
 
@@ -5,6 +7,8 @@
   // For now, defining extractFromDom inline as a temporary solution
   function extractFromDom(doc) {
     try {
+      const startTime = performance.now();
+
       // Simple extraction without Readability for now
       // This is a temporary implementation until proper bundling is configured
       // TODO: Replace with proper import from @briefcase/extractor package
@@ -14,40 +18,73 @@
       const url = doc.location?.href || "";
       const site = doc.location?.hostname || "";
 
-      // Get main content areas
+      // Get main content areas with fallback prioritization:
+      // 1. <article> - Most semantic for blog posts and articles
+      // 2. <main> - Common main content container
+      // 3. <body> - Last resort fallback for unusual page structures
       const article = doc.querySelector("article") || doc.querySelector("main") || doc.body;
       const paragraphs = Array.from(article.querySelectorAll("p"));
 
-      // Extract text content
-      const textContent = paragraphs
+      // Extract text content with length limits
+      const MAX_TEXT_LENGTH = 500000; // ~500KB text limit
+      const MAX_SECTIONS = 1000; // Limit number of sections to prevent memory issues
+
+      let textContent = paragraphs
         .map((p) => p.textContent?.trim())
         .filter(Boolean)
         .join("\n\n");
 
-      // Create sections from paragraphs
+      // Apply content length limit
+      if (textContent.length > MAX_TEXT_LENGTH) {
+        console.warn(
+          `[CS] Content truncated from ${textContent.length} to ${MAX_TEXT_LENGTH} chars`,
+        );
+        textContent = textContent.substring(0, MAX_TEXT_LENGTH) + "...";
+      }
+
+      // Create sections from paragraphs with limit
       const sections = paragraphs
+        .slice(0, MAX_SECTIONS)
         .map((p, i) => ({
           id: `p${i}`,
           text: p.textContent?.trim() || "",
         }))
         .filter((section) => section.text.length > 0);
 
+      if (paragraphs.length > MAX_SECTIONS) {
+        console.warn(`[CS] Sections limited from ${paragraphs.length} to ${MAX_SECTIONS}`);
+      }
+
       // Calculate word count
       const wordCount = textContent.split(/\s+/).filter(Boolean).length;
 
       // Return null if no meaningful content found
       if (wordCount < 10) {
+        console.log("[CS] Extraction skipped - insufficient content (< 10 words)");
         return null;
       }
 
-      return {
+      // Calculate extraction time
+      const extractionTime = performance.now() - startTime;
+
+      const result = {
         url: url,
         title: title,
         site: site,
         rawText: textContent,
         sections: sections,
         wordCount: wordCount,
+        // Add extraction metrics
+        extractionMetrics: {
+          timeMs: Math.round(extractionTime),
+          paragraphsFound: paragraphs.length,
+          sectionsExtracted: sections.length,
+          truncated: textContent.length >= MAX_TEXT_LENGTH || paragraphs.length > MAX_SECTIONS,
+        },
       };
+
+      console.log(`[CS] Extraction successful in ${Math.round(extractionTime)}ms`);
+      return result;
     } catch (error) {
       console.error("[CS] Extraction failed:", error);
       return null;
@@ -70,6 +107,13 @@
           console.log("[CS] - URL:", extractedPayload.url);
           console.log("[CS] - Word count:", extractedPayload.wordCount);
           console.log("[CS] - Sections extracted:", extractedPayload.sections?.length || 0);
+          if (extractedPayload.extractionMetrics) {
+            console.log(
+              "[CS] - Extraction time:",
+              extractedPayload.extractionMetrics.timeMs + "ms",
+            );
+            console.log("[CS] - Truncated:", extractedPayload.extractionMetrics.truncated);
+          }
         } else {
           console.log("[CS] Content extraction returned null (no suitable content found)");
         }
