@@ -386,34 +386,54 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           console.log("[BG] Starting LLM summarization with OllamaProvider");
           console.log("[BG] - Parameters:", msg.params);
 
+          // Generate a unique request ID to correlate chunks with this request
+          const requestId = `summary-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+          console.log("[BG] Generated request ID:", requestId);
+
           try {
+            // Send initial acknowledgment that streaming will begin
+            sendResponse({
+              status: "streaming",
+              requestId: requestId,
+              extractedPayload: contentResult.payload,
+            });
+
             // Call OllamaProvider.summarize with extracted content and parameters
             const summaryGenerator = OllamaProvider.summarize(
               contentResult.payload.rawText,
               msg.params,
             );
 
-            // Iterate over the summary stream and accumulate chunks
-            let fullSummary = "";
+            // Stream chunks to the panel
             let chunkCount = 0;
+            let totalLength = 0;
 
-            console.log("[BG] Starting to receive summary chunks...");
+            console.log("[BG] Starting to stream summary chunks...");
             for await (const chunk of summaryGenerator) {
               chunkCount++;
-              fullSummary += chunk;
-              // Log each chunk as it arrives for validation
-              console.log(`[BG] Received chunk #${chunkCount}: "${chunk.substring(0, 50)}..."`);
+              totalLength += chunk.length;
+
+              // Send chunk to panel via broadcast message
+              chrome.runtime.sendMessage({
+                type: "SUMMARY_CHUNK",
+                payload: chunk,
+                requestId: requestId,
+              });
+
+              // Log progress for validation
+              console.log(`[BG] Streamed chunk #${chunkCount}: "${chunk.substring(0, 50)}..."`);
             }
 
-            console.log(`[BG] Summary complete. Total chunks received: ${chunkCount}`);
-            console.log(`[BG] Summary length: ${fullSummary.length} characters`);
+            console.log(`[BG] Streaming complete. Total chunks sent: ${chunkCount}`);
+            console.log(`[BG] Total summary length: ${totalLength} characters`);
 
-            // Send the complete summary
-            sendResponse({
-              text: fullSummary,
-              extractedPayload: contentResult.payload,
+            // Send completion signal
+            chrome.runtime.sendMessage({
+              type: "SUMMARY_COMPLETE",
+              requestId: requestId,
               metadata: {
                 chunksReceived: chunkCount,
+                totalLength: totalLength,
                 provider: "ollama",
                 model: currentSettings.OLLAMA_MODEL,
               },
@@ -422,20 +442,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const sanitized = sanitizeError(llmError);
             console.warn("[BG] LLM summarization failed:", sanitized.message);
 
-            // Send error response with fallback to original content
-            sendResponse({
+            // Send error via broadcast message to panel
+            chrome.runtime.sendMessage({
+              type: "SUMMARY_ERROR",
+              requestId: requestId,
               error: {
                 code: sanitized.code || "LLM_SUMMARIZATION_FAILED",
                 message: sanitized.message,
                 details: "The LLM provider encountered an error during summarization",
               },
-              extractedPayload: contentResult.payload,
-              fallbackText: "Unable to generate summary. Original content available.",
             });
           }
         } else {
           console.warn("[BG] No valid content to summarize");
+
+          // Generate a request ID even for error case for consistency
+          const requestId = `summary-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
           sendResponse({
+            status: "error",
+            requestId: requestId,
             error: {
               code: "NO_CONTENT_TO_SUMMARIZE",
               message: "No extracted content available for summarization",
