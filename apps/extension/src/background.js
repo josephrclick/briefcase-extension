@@ -1,12 +1,87 @@
 /* global setTimeout, clearTimeout, fetch, AbortController, TextDecoder */
 
-// TODO: Import from @briefcase/providers when bundling is set up
-// For now, defining OllamaProvider inline as a temporary solution
-const OllamaProvider = {
-  // Configuration - these would come from extension settings in production
+// Default settings - can be overridden via chrome.storage.sync
+const DEFAULT_SETTINGS = {
   OLLAMA_BASE_URL: "http://localhost:11434",
   OLLAMA_MODEL: "llama3.2",
   REQUEST_TIMEOUT_MS: 30000, // 30 seconds
+  MESSAGE_TIMEOUT_MS: 10000, // 10 seconds (increased from 5)
+  MAX_CONTENT_LENGTH: 100000, // 100K characters max
+};
+
+// Settings management
+let currentSettings = { ...DEFAULT_SETTINGS };
+
+// Load settings from chrome.storage
+async function loadSettings() {
+  try {
+    const stored = await chrome.storage.sync.get("ollamaSettings");
+    if (stored.ollamaSettings) {
+      currentSettings = { ...DEFAULT_SETTINGS, ...stored.ollamaSettings };
+    }
+  } catch (error) {
+    console.warn("[BG] Failed to load settings, using defaults", error.message);
+  }
+  return currentSettings;
+}
+
+// Initialize settings on startup
+loadSettings();
+
+// Input validation helper
+function validateSummarizeInput(content, params) {
+  const errors = [];
+
+  // Validate content
+  if (!content || typeof content !== "string") {
+    errors.push("Content must be a non-empty string");
+  } else if (content.length > currentSettings.MAX_CONTENT_LENGTH) {
+    errors.push(
+      `Content exceeds maximum length of ${currentSettings.MAX_CONTENT_LENGTH} characters`,
+    );
+  }
+
+  // Validate parameters
+  if (params) {
+    const validLengths = ["brief", "medium", "verbose"];
+    const validLevels = ["kinder", "high_school", "college", "phd"];
+    const validStyles = ["plain", "bullets", "executive"];
+
+    if (params.length && !validLengths.includes(params.length)) {
+      errors.push(`Invalid length parameter: ${params.length}`);
+    }
+    if (params.level && !validLevels.includes(params.level)) {
+      errors.push(`Invalid level parameter: ${params.level}`);
+    }
+    if (params.style && !validStyles.includes(params.style)) {
+      errors.push(`Invalid style parameter: ${params.style}`);
+    }
+  }
+
+  return errors.length > 0 ? errors : null;
+}
+
+// Error sanitization helper
+function sanitizeError(error) {
+  // Remove stack traces and sensitive info
+  const message = error.message || "An error occurred";
+
+  // Only log full error in development (you could check a debug flag)
+  if (currentSettings.DEBUG_MODE) {
+    console.error("[BG] Full error:", error);
+  }
+
+  // Return sanitized message for UI
+  return {
+    message: message.substring(0, 200), // Limit message length
+    code: error.code || "UNKNOWN_ERROR",
+  };
+}
+
+// TODO: Import from @briefcase/providers when bundling is set up
+// For now, defining OllamaProvider inline as a temporary solution
+const OllamaProvider = {
+  // Use settings from currentSettings object
 
   /**
    * Build a system prompt based on user parameters
@@ -50,12 +125,18 @@ Requirements:
    * Summarize content using Ollama streaming API
    */
   async *summarize(content, params, _signal) {
+    // Validate input before processing
+    const validationErrors = validateSummarizeInput(content, params);
+    if (validationErrors) {
+      throw new Error(`Input validation failed: ${validationErrors.join(", ")}`);
+    }
+
     const systemPrompt = this.buildSystemPrompt(params);
     const userPrompt = `Please summarize the following content:\n\n${content}`;
 
     // Prepare the request body
     const requestBody = {
-      model: this.OLLAMA_MODEL,
+      model: currentSettings.OLLAMA_MODEL,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
@@ -69,7 +150,7 @@ Requirements:
 
     // Set up timeout handling
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.REQUEST_TIMEOUT_MS);
+    const timeoutId = setTimeout(() => controller.abort(), currentSettings.REQUEST_TIMEOUT_MS);
 
     // Use timeout signal (AbortSignal.any() may not be available in all Chrome versions)
     // For now, just use the timeout signal
@@ -79,7 +160,7 @@ Requirements:
 
     try {
       // Make the request to Ollama
-      response = await fetch(`${this.OLLAMA_BASE_URL}/api/chat`, {
+      response = await fetch(`${currentSettings.OLLAMA_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
@@ -111,7 +192,7 @@ Requirements:
 
       if (response.status === 404 && errorText.includes("model")) {
         throw new Error(
-          `Model '${this.OLLAMA_MODEL}' not found. Please pull it with: ollama pull ${this.OLLAMA_MODEL}`,
+          `Model '${currentSettings.OLLAMA_MODEL}' not found. Please pull it with: ollama pull ${currentSettings.OLLAMA_MODEL}`,
         );
       }
 
@@ -173,9 +254,9 @@ Requirements:
             if (parsed.message?.content) {
               yield parsed.message.content;
             }
-          } catch (parseError) {
-            console.error("[BG] Failed to parse NDJSON line:", line, parseError);
-            // Continue processing other lines
+          } catch {
+            console.warn("[BG] Failed to parse NDJSON line");
+            // Continue processing other lines without exposing details
           }
         }
       }
@@ -185,7 +266,7 @@ Requirements:
         return;
       }
 
-      console.error("[BG] Error reading stream:", error);
+      console.warn("[BG] Error reading stream", error.message);
       throw new Error("Failed to process streaming response from Ollama");
     } finally {
       reader.releaseLock();
@@ -212,7 +293,8 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "SUMMARIZE") {
     // Handle SUMMARIZE message from the panel
-    (async () => {
+    // Return a Promise to properly handle async operations
+    const handleSummarize = async () => {
       try {
         console.log("[BG] SUMMARIZE message received with params:", msg.params);
 
@@ -235,7 +317,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         console.log("[BG] Sending GET_CONTENT to tab:", activeTab.id);
 
         // Add timeout to prevent hanging requests
-        const MESSAGE_TIMEOUT_MS = 5000;
+        const MESSAGE_TIMEOUT_MS = currentSettings.MESSAGE_TIMEOUT_MS;
 
         const contentResult = await Promise.race([
           // Message promise
@@ -333,17 +415,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               metadata: {
                 chunksReceived: chunkCount,
                 provider: "ollama",
-                model: OllamaProvider.OLLAMA_MODEL,
+                model: currentSettings.OLLAMA_MODEL,
               },
             });
           } catch (llmError) {
-            console.error("[BG] LLM summarization failed:", llmError);
+            const sanitized = sanitizeError(llmError);
+            console.warn("[BG] LLM summarization failed:", sanitized.message);
 
             // Send error response with fallback to original content
             sendResponse({
               error: {
-                code: "LLM_SUMMARIZATION_FAILED",
-                message: llmError.message || "Failed to generate summary",
+                code: sanitized.code || "LLM_SUMMARIZATION_FAILED",
+                message: sanitized.message,
                 details: "The LLM provider encountered an error during summarization",
               },
               extractedPayload: contentResult.payload,
@@ -362,18 +445,34 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           });
         }
       } catch (error) {
-        console.error("[BG] Error handling SUMMARIZE message:", error);
-        sendResponse({
+        const sanitized = sanitizeError(error);
+        console.warn("[BG] Error handling SUMMARIZE message:", sanitized.message);
+        return {
           error: {
-            code: "SUMMARIZE_FAILED",
-            message: error.message || "Failed to process summarize request",
+            code: sanitized.code || "SUMMARIZE_FAILED",
+            message: sanitized.message,
             details: "An unexpected error occurred during summarization",
           },
-        });
+        };
       }
-    })();
+    };
 
-    // Keep the message channel open for async response
+    // Execute the async handler and return the Promise
+    // This ensures proper message channel handling
+    handleSummarize()
+      .then(sendResponse)
+      .catch((error) => {
+        const sanitized = sanitizeError(error);
+        sendResponse({
+          error: {
+            code: sanitized.code || "HANDLER_ERROR",
+            message: sanitized.message,
+            details: "Failed to handle message",
+          },
+        });
+      });
+
+    // Return true to indicate async response
     return true;
   }
 });
