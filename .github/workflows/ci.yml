@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "Installing actionlint..."
           bash <(curl https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          echo "${PWD}" >> $GITHUB_PATH
+          echo "${PWD}" >> "$GITHUB_PATH"
 
       - name: Validate all workflow files
         run: |
@@ -151,11 +151,11 @@ jobs:
           size=$(du -sb apps/extension | cut -f1)
           max_size=$((10 * 1024 * 1024))  # 10MB limit
 
-          if [ $size -gt $max_size ]; then
+          if [ "$size" -gt "$max_size" ]; then
             echo "❌ Extension size ($size bytes) exceeds 10MB limit"
             exit 1
           else
-            echo "✅ Extension size: $(($size / 1024))KB"
+            echo "✅ Extension size: $((size / 1024))KB"
           fi
 
       - name: Create extension ZIP
