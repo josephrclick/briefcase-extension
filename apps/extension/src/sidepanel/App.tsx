@@ -1,4 +1,3 @@
-import React from "react";
 import { HydrationBoundary } from "./hooks/useHydration";
 import { useExtensionPort } from "./hooks/useExtensionPort";
 import Header from "./components/Header";

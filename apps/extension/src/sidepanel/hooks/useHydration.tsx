@@ -25,13 +25,14 @@ export function useStoreHydration<
       setHydrated(store.persist.hasHydrated?.() || false);
 
       return () => {
-        unsubHydrate?.();
-        unsubFinishHydration?.();
+        if (unsubHydrate) (unsubHydrate as () => void)();
+        if (unsubFinishHydration) (unsubFinishHydration as () => void)();
       };
-    } else {
-      // Non-persisted stores are always "hydrated"
-      setHydrated(true);
     }
+
+    // Non-persisted stores are always "hydrated"
+    setHydrated(true);
+    return undefined;
   }, [store]);
 
   return hydrated;

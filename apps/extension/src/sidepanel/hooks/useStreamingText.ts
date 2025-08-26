@@ -15,7 +15,7 @@ export function useStreamingText({
 }: UseStreamingTextOptions) {
   const [displayText, setDisplayText] = useState("");
   const [cursor, setCursor] = useState(0);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const lastTextRef = useRef("");
 
   // Reset animation when text changes significantly
@@ -77,6 +77,7 @@ export function useStreamingText({
 
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isStreaming, text, displayText, enableTypewriter]);
 
   // Instant mode when typewriter is disabled
