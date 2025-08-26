@@ -23,7 +23,7 @@
     "type": "module"
   },
   "side_panel": {
-    "default_path": "panel/index.html"
+    "default_path": "src/sidepanel/index.html"
   },
   "content_scripts": [
     {
