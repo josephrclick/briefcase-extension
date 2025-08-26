@@ -141,102 +141,13 @@ The project uses a hierarchical Python-based hook system for enhanced reliabilit
 
 To customize your local environment, copy `.claude/settings.local.json.template` to `.claude/settings.local.json`.
 
-## Work Log Instructions
-
-**IMPORTANT**: After completing any task or sprint, you MUST update the Work Log section below by:
-
-1. Adding a dated entry summarizing work completed
-2. Noting any open issues or blockers needing attention
-3. Including any pertinent information the next coder should know
-4. Keeping entries brief but informative
-
-**Before starting work**, always review recent Work Log entries to understand the current project state.
+## Work Log
 
 📁 **Archives**: This log shows recent work only. For historical entries, see [.claude/archives/INDEX.md](.claude/archives/INDEX.md)
 
 ---
 
 ## Work Log
-
-**Current Branch**: `main`
-
----
-
-### 2025-08-25 - Implement Readability.js Content Extraction (Issue #14)
-
-- **Implemented Core Content Extraction**:
-  - Added @mozilla/readability as dependency to packages/extractor
-  - Replaced basic DOM traversal with robust Readability.js implementation
-  - Properly clones DOM to avoid modifying live page content
-  - Returns ExtractedPayload with title, rawText, url, site, wordCount, and sections
-  - Handles extraction failures gracefully by returning null
-- **Added Test Infrastructure**:
-
-  - Installed vitest, @vitest/ui, and happy-dom for testing
-  - Created comprehensive unit tests covering success and failure cases
-  - Updated tsconfig.json to include test files
-  - All tests passing (4/4)
-
-- **Outcome**: Created PR [#21](https://github.com/josephrclick/briefcase-extension/pull/21) for review
-
-### 2025-08-25 - feat consolidate github workflows issue 11
-
-- **Work Done**: Completed 'feat consolidate github workflows issue 11' on branch `feat/feat-consolidate-github-workflows-issue-11`.
-- **Outcome**: Created PR [#20](https://github.com/josephrclick/briefcase-extension/pull/20) for review.
-
-### 2025-08-25 - Pre-commit Hooks Setup (Issue #8)
-
-- **Implemented Pre-commit Hooks with Husky and lint-staged**:
-
-  - Installed lint-staged as dev dependency in monorepo root
-  - Initialized Husky with `npx husky init` to create `.husky/` directory
-  - Created `.lintstagedrc.json` configuration:
-    - Runs Prettier and ESLint on JS/TS files
-    - Runs Prettier on JSON, MD, CSS, HTML files
-    - Configured for monorepo structure (root-level execution)
-  - Updated `.husky/pre-commit` hook to run `npx lint-staged`
-  - Fixed Husky v9 deprecation warning in commit-msg hook
-  - Successfully tested with intentionally malformed files
-  - Pre-commit hooks now automatically format and lint staged files
-
-- **Key Features**:
-
-  - Prevents formatting issues from reaching CI (like in PR #5)
-  - Only processes staged files for fast execution
-  - Automatically fixes and stages formatting corrections
-  - Works seamlessly with monorepo structure
-  - Integrated with existing commitlint setup
-
-- **Note**: Encountered ESM/CommonJS conflict with commitlint.config.js that needs separate resolution
-
-### 2025-08-25 - Work Log Update Automation (Issue #7)
-
-- **Implemented Automated Work Log Updates**:
-
-  - Created `.claude/scripts/update-worklog.sh` to manage CLAUDE.md updates
-  - Modified git workflow commands to automatically update work log:
-    - `git-start`: Sets current branch when creating new feature
-    - `git-switch`: Updates branch indicator when switching
-    - `git-review`: Adds work log entry and resets to main after PR
-  - Added structured "Current Branch" indicator to CLAUDE.md
-  - Fixed sed escaping issue for branch names containing slashes
-  - Created comprehensive documentation in `.claude/WORKLOG_AUTOMATION.md`
-  - Added CI verification workflow (`.github/workflows/verify-worklog.yml`) to ensure:
-    - Work log structure remains valid
-    - Update scripts are executable
-    - Branch updates work correctly
-  - Successfully tested all automation features
-
-- **Root Cause Analysis**:
-
-  - No automation existed - all updates were manual
-  - No git hooks configured for branch events
-  - Git workflow commands didn't interact with CLAUDE.md
-
-- **Solution Approach**:
-  - Hybrid approach: dedicated update script + workflow integration
-  - Avoided git hooks to reduce setup complexity
-  - Maintained backward compatibility with existing workflows
 
 ### 2025-08-24 (Part 2) - Git Workflow Automation & Prettier Hook
 

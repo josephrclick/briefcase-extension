@@ -9,8 +9,15 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "scripting", "storage", "downloads"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "sidePanel"],
   "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Open Briefcase",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
   "background": {
     "service_worker": "src/background.js",
     "type": "module"

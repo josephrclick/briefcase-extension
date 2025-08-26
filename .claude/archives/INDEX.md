@@ -26,3 +26,8 @@ This directory contains archived work log entries from CLAUDE.md to keep the mai
 
 - Return to [CLAUDE.md](../../CLAUDE.md)
 - View [Project README](../../README.md)
+
+- [2025-08-25 - Implement Readability.js Content Extraction (Issue #14)](2025/worklog-2025-08-25-implement-readability-js-content-extraction-issue-14-.md)
+- [2025-08-25 - feat consolidate github workflows issue 11](2025/worklog-2025-08-25-feat-consolidate-github-workflows-issue-11.md)
+- [2025-08-25 - Pre-commit Hooks Setup (Issue #8)](2025/worklog-2025-08-25-pre-commit-hooks-setup-issue-8-.md)
+- [2025-08-25 - Work Log Update Automation (Issue #7)](2025/worklog-2025-08-25-work-log-update-automation-issue-7-.md)
