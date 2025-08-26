@@ -16,10 +16,14 @@ on:
 
 jobs:
   claude-review:
-    # Security: Require manual approval for first-time contributors (GPT-5's recommendation)
+    # Skip review for draft PRs, WIP, or explicit skip-review tags
+    # Also skip for first-time contributors (security)
     if: |
-      github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' ||
-      github.event.pull_request.author_association != 'FIRST_TIMER'
+      !github.event.pull_request.draft &&
+      !contains(github.event.pull_request.title, '[WIP]') &&
+      !contains(github.event.pull_request.title, '[skip-review]') &&
+      (github.event.pull_request.author_association != 'FIRST_TIME_CONTRIBUTOR' &&
+       github.event.pull_request.author_association != 'FIRST_TIMER')
 
     runs-on: ubuntu-latest
     permissions:
@@ -90,9 +94,3 @@ jobs:
             Read(packages/**)
             Read(apps/**)
             Read(_docs/**)
-
-          # Skip review for WIP or draft PRs
-          skip_conditions: |
-            contains(github.event.pull_request.title, '[WIP]') ||
-            contains(github.event.pull_request.title, '[skip-review]') ||
-            github.event.pull_request.draft == true
