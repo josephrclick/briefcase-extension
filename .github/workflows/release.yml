@@ -98,27 +98,29 @@ jobs:
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
 
           # Generate changelog from commits
-          echo "## What's Changed" > RELEASE_NOTES.md
-          echo "" >> RELEASE_NOTES.md
+          {
+            echo "## What's Changed"
+            echo ""
 
-          # Group commits by type
-          echo "### Features" >> RELEASE_NOTES.md
-          git log --pretty=format:"* %s (%h)" --grep="^feat" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD >> RELEASE_NOTES.md || echo "* No new features" >> RELEASE_NOTES.md
+            # Group commits by type
+            echo "### Features"
+            git log --pretty=format:"* %s (%h)" --grep="^feat" "$(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD" 2>/dev/null || echo "* No new features"
 
-          echo "" >> RELEASE_NOTES.md
-          echo "### Bug Fixes" >> RELEASE_NOTES.md
-          git log --pretty=format:"* %s (%h)" --grep="^fix" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD >> RELEASE_NOTES.md || echo "* No bug fixes" >> RELEASE_NOTES.md
+            echo ""
+            echo "### Bug Fixes"
+            git log --pretty=format:"* %s (%h)" --grep="^fix" "$(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD" 2>/dev/null || echo "* No bug fixes"
 
-          echo "" >> RELEASE_NOTES.md
-          echo "### Other Changes" >> RELEASE_NOTES.md
-          git log --pretty=format:"* %s (%h)" --grep="^(chore|docs|style|refactor|perf|test|build|ci)" $(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD >> RELEASE_NOTES.md || echo "* No other changes" >> RELEASE_NOTES.md
+            echo ""
+            echo "### Other Changes"
+            git log --pretty=format:"* %s (%h)" --grep="^(chore|docs|style|refactor|perf|test|build|ci)" "$(git describe --tags --abbrev=0 2>/dev/null || echo "")..HEAD" 2>/dev/null || echo "* No other changes"
 
-          echo "" >> RELEASE_NOTES.md
-          echo "---" >> RELEASE_NOTES.md
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 2>/dev/null || echo "main")...$VERSION" >> RELEASE_NOTES.md
+            echo ""
+            echo "---"
+            echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 2>/dev/null || echo "main")...$VERSION"
+          } > RELEASE_NOTES.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.version && format('v{0}', github.event.inputs.version) || github.ref_name }}
           name: Release ${{ github.event.inputs.version || github.ref_name }}
