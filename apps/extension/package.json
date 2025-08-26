@@ -6,12 +6,26 @@
   "dependencies": {
     "@briefcase/db": "0.1.0",
     "@briefcase/extractor": "0.1.0",
-    "@briefcase/providers": "0.1.0"
+    "@briefcase/providers": "0.1.0",
+    "clsx": "2.1.1",
+    "immer": "10.1.1",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "zustand": "5.0.8"
   },
   "scripts": {
-    "build": "echo \"(bundle step TBD)\"",
-    "lint": "eslint --ext .js,.ts panel src || true",
-    "typecheck": "tsc -v >/dev/null 2>&1 || echo \"ts not configured yet\"",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint --ext .js,.ts,.tsx src || true",
+    "typecheck": "tsc --noEmit",
     "test": "echo \"(no tests yet)\""
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "2.2.0",
+    "@types/react": "19.1.11",
+    "@types/react-dom": "19.1.8",
+    "@vitejs/plugin-react": "5.0.1",
+    "vite": "7.1.3"
   }
 }
