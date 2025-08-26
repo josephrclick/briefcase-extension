@@ -6,8 +6,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 1. **Review the PRD**: The `_docs/PRD.md` file is the core foundational document and source of truth for all architecture decisions. Always reference it for project requirements, data models, and technical specifications.
 
-2. **Check Work Log**: Review the Work Log section at the bottom of this document for the latest updates on project state, recent changes, and any open issues that need attention.
-
 ## Project Overview
 
 Briefcase is a Chrome Extension (Manifest V3) that extracts main content from web pages and produces tailored summaries using LLMs. It's a local-first, privacy-focused extension with a pinned side panel UI.
@@ -140,63 +138,3 @@ The project uses a hierarchical Python-based hook system for enhanced reliabilit
 - **Denied**: Modifying sensitive files, dangerous commands (rm -rf, curl, wget)
 
 To customize your local environment, copy `.claude/settings.local.json.template` to `.claude/settings.local.json`.
-
-## Work Log
-
-📁 **Archives**: This log shows recent work only. For historical entries, see [.claude/archives/INDEX.md](.claude/archives/INDEX.md)
-
----
-
-## Work Log
-
-### 2025-08-24 (Part 2) - Git Workflow Automation & Prettier Hook
-
-- **Enhanced Git Workflow Automation**:
-
-  - Integrated Git workflow commands from previous project (git-start, git-save, git-review, git-status)
-  - Created main workflow script (`.claude/commands/git-workflow.sh`) with safety rules
-  - Updated to use `main` branch only (removed references to `dev` branch)
-  - **Enhanced git-review with dynamic PR checklists**:
-    - Analyzes changed files to generate context-specific checklists
-    - Adds relevant checks for database, UI, manifest, TypeScript, dependencies
-    - Shows file count and affected project areas
-    - Automatic issue linking with `git-review #issue`
-  - Converted Git commands from .sh to .md format for Claude Code slash commands
-  - Added 'wip' as valid commit type in commitlint configuration
-  - Created comprehensive documentation in `.claude/GIT_WORKFLOW.md`
-
-- **Fixed Prettier Formatting Hook** (Issue #2):
-
-  - Created POSIX-compliant prettier formatting script (`.claude/hooks/prettier-format.sh`)
-  - Configured PostToolUse hook in `.claude/settings.json` for Edit/Write/MultiEdit operations
-  - Successfully tested with JavaScript and JSON files
-  - Created PR #3 demonstrating complete GitHub Actions workflow
-  - Resolves previous shell syntax errors with proper POSIX compliance
-
-- **Current Branch**: `feat/prettier-hook` - Ready for review with PR #3
-
-### 2025-08-25 - Work Log Pruning & Lint Fix (Issue #4)
-
-- **Implemented Work Log Pruning**:
-
-  - Created `.claude/scripts/prune-worklog.js` to automatically archive old work logs
-  - Established retention policy: keep 30 days in main log, archive older entries
-  - Created `.claude/WORKLOG_PRUNING.md` with detailed usage and CI integration notes
-  - Added npm scripts: `prune:worklog` and `prune:worklog:dry` for manual pruning
-  - Successfully archived initial work log entries to `.claude/archives/2025/`
-  - Created index file at `.claude/archives/INDEX.md` for navigation
-
-- **Fixed Prettier Lint Issues**:
-
-  - Resolved CI failures by formatting 4 files with Prettier
-  - Created `.prettierignore` to preserve archive immutability
-  - Added `format` and `format:check` npm scripts for consistency
-  - Excluded `.claude/archives/**` from Prettier checks to prevent formatting drift
-
-- **Current Branch**: `work-log-pruning` - PR #5 addressing issue #4
-
-- **Next steps**:
-  - Merge prettier hook PR once CI passes
-  - Begin implementing core extension structure per PRD specifications
-  - Start with basic manifest.json setup
-  - Create initial React side panel UI
