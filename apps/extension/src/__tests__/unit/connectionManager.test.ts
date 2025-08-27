@@ -12,7 +12,7 @@ vi.mock("@briefcase/db", () => ({
 }));
 
 describe("Connection Pool Management", () => {
-  let connectionManager: ConnectionManager;
+  let connectionManager: any;
   let mockConnections: any[];
 
   beforeEach(() => {
@@ -28,7 +28,7 @@ describe("Connection Pool Management", () => {
       });
     }
 
-    connectionManager = new ConnectionManager();
+    connectionManager = new ConnectionManager() as any;
   });
 
   afterEach(() => {
@@ -40,7 +40,7 @@ describe("Connection Pool Management", () => {
     it("should initialize the connection manager", async () => {
       await connectionManager.initialize();
 
-      expect(connectionManager["isInitialized"]).toBe(true);
+      expect(connectionManager.isInitialized).toBe(true);
     });
 
     it("should prevent multiple simultaneous initializations", async () => {
@@ -51,13 +51,13 @@ describe("Connection Pool Management", () => {
       await Promise.all([promise1, promise2, promise3]);
 
       // Verify initialize was only called once internally
-      expect(connectionManager["isInitialized"]).toBe(true);
+      expect(connectionManager.isInitialized).toBe(true);
     });
 
     it("should create connections on demand", async () => {
       await connectionManager.initialize();
 
-      const conn = await connectionManager["getConnection"]();
+      const conn = await connectionManager.getConnection();
       expect(conn).toBeDefined();
       expect(conn.exec).toBeDefined();
       expect(conn.close).toBeDefined();
@@ -66,10 +66,10 @@ describe("Connection Pool Management", () => {
     it("should reuse idle connections", async () => {
       await connectionManager.initialize();
 
-      const conn1 = await connectionManager["getConnection"]();
-      connectionManager["releaseConnection"](conn1);
+      const conn1 = await connectionManager.getConnection();
+      connectionManager.releaseConnection(conn1);
 
-      const conn2 = await connectionManager["getConnection"]();
+      const conn2 = await connectionManager.getConnection();
       expect(conn1).toBe(conn2); // Should be the same connection object
     });
 
@@ -80,17 +80,17 @@ describe("Connection Pool Management", () => {
 
       // Get max connections
       for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager["getConnection"]());
+        connections.push(await connectionManager.getConnection());
       }
 
       // Try to get one more - should wait or fail
-      const extraConnectionPromise = connectionManager["getConnection"]();
+      const extraConnectionPromise = connectionManager.getConnection();
 
       // Should be waiting for a connection
-      expect(connectionManager["pool"].length).toBe(5);
+      expect(connectionManager.pool.length).toBe(5);
 
       // Release one connection
-      connectionManager["releaseConnection"](connections[0]);
+      connectionManager.releaseConnection(connections[0]);
 
       // Now the waiting connection should resolve
       const extraConnection = await extraConnectionPromise;
@@ -100,26 +100,26 @@ describe("Connection Pool Management", () => {
     it("should mark connections as in use correctly", async () => {
       await connectionManager.initialize();
 
-      const conn = await connectionManager["getConnection"]();
-      const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
+      const conn = await connectionManager.getConnection();
+      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
 
       expect(pooledConn?.inUse).toBe(true);
 
-      connectionManager["releaseConnection"](conn);
+      connectionManager.releaseConnection(conn);
       expect(pooledConn?.inUse).toBe(false);
     });
 
     it("should update lastUsed timestamp on release", async () => {
       await connectionManager.initialize();
 
-      const conn = await connectionManager["getConnection"]();
-      const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
+      const conn = await connectionManager.getConnection();
+      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
       const initialTimestamp = pooledConn?.lastUsed;
 
       // Wait a bit
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      connectionManager["releaseConnection"](conn);
+      connectionManager.releaseConnection(conn);
       expect(pooledConn?.lastUsed).toBeGreaterThan(initialTimestamp!);
     });
   });
@@ -129,9 +129,9 @@ describe("Connection Pool Management", () => {
       await connectionManager.initialize();
 
       // Create and release a connection
-      const conn = await connectionManager["getConnection"]();
-      const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
-      connectionManager["releaseConnection"](conn);
+      const conn = await connectionManager.getConnection();
+      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
+      connectionManager.releaseConnection(conn);
 
       // Mock the connection as idle for longer than timeout
       if (pooledConn) {
@@ -139,18 +139,18 @@ describe("Connection Pool Management", () => {
       }
 
       // Trigger cleanup
-      connectionManager["cleanupIdleConnections"]();
+      connectionManager.cleanupIdleConnections();
 
       // Connection should be removed
-      expect(connectionManager["pool"].find((p) => p.connection === conn)).toBeUndefined();
+      expect(connectionManager.pool.find((p: any) => p.connection === conn)).toBeUndefined();
       expect(conn.close).toHaveBeenCalled();
     });
 
     it("should not clean up active connections", async () => {
       await connectionManager.initialize();
 
-      const conn = await connectionManager["getConnection"]();
-      const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
+      const conn = await connectionManager.getConnection();
+      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
 
       // Mock as old but still in use
       if (pooledConn) {
@@ -158,10 +158,10 @@ describe("Connection Pool Management", () => {
         // conn is still marked as inUse = true
       }
 
-      connectionManager["cleanupIdleConnections"]();
+      connectionManager.cleanupIdleConnections();
 
       // Connection should NOT be removed
-      expect(connectionManager["pool"].find((p) => p.connection === conn)).toBeDefined();
+      expect(connectionManager.pool.find((p: any) => p.connection === conn)).toBeDefined();
       expect(conn.close).not.toHaveBeenCalled();
     });
 
@@ -171,25 +171,25 @@ describe("Connection Pool Management", () => {
       // Create multiple connections
       const conns = [];
       for (let i = 0; i < 3; i++) {
-        conns.push(await connectionManager["getConnection"]());
+        conns.push(await connectionManager.getConnection());
       }
 
       // Release all
-      conns.forEach((c) => connectionManager["releaseConnection"](c));
+      conns.forEach((c) => connectionManager.releaseConnection(c));
 
       // Mark all as old
-      connectionManager["pool"].forEach((p) => {
+      connectionManager.pool.forEach((p: any) => {
         p.lastUsed = Date.now() - 400000;
       });
 
-      connectionManager["cleanupIdleConnections"]();
+      connectionManager.cleanupIdleConnections();
 
       // Should keep at least 1 connection
-      expect(connectionManager["pool"].length).toBeGreaterThanOrEqual(1);
+      expect(connectionManager.pool.length).toBeGreaterThanOrEqual(1);
     });
 
     it("should run periodic cleanup", () => {
-      const cleanupSpy = vi.spyOn(connectionManager as any, "cleanupIdleConnections");
+      const cleanupSpy = vi.spyOn(connectionManager, "cleanupIdleConnections");
 
       // Fast-forward time to trigger cleanup
       vi.advanceTimersByTime(60000); // 1 minute
@@ -203,27 +203,27 @@ describe("Connection Pool Management", () => {
       await connectionManager.initialize();
 
       // Get initial stats
-      let stats = connectionManager["getPoolStats"]();
+      let stats = connectionManager.getPoolStats();
       expect(stats.total).toBe(1); // One created during init
       expect(stats.active).toBe(0);
       expect(stats.idle).toBe(1);
 
       // Get a connection
-      const conn1 = await connectionManager["getConnection"]();
-      stats = connectionManager["getPoolStats"]();
+      const conn1 = await connectionManager.getConnection();
+      stats = connectionManager.getPoolStats();
       expect(stats.active).toBe(1);
       expect(stats.idle).toBe(0);
 
       // Get another connection
-      const conn2 = await connectionManager["getConnection"]();
-      stats = connectionManager["getPoolStats"]();
+      await connectionManager.getConnection();
+      stats = connectionManager.getPoolStats();
       expect(stats.total).toBe(2);
       expect(stats.active).toBe(2);
       expect(stats.idle).toBe(0);
 
       // Release one
-      connectionManager["releaseConnection"](conn1);
-      stats = connectionManager["getPoolStats"]();
+      connectionManager.releaseConnection(conn1);
+      stats = connectionManager.getPoolStats();
       expect(stats.active).toBe(1);
       expect(stats.idle).toBe(1);
     });
@@ -233,21 +233,21 @@ describe("Connection Pool Management", () => {
     it("should create new connections when pool is empty", async () => {
       await connectionManager.initialize();
 
-      const conn1 = await connectionManager["getConnection"]();
-      const conn2 = await connectionManager["getConnection"]();
+      const conn1 = await connectionManager.getConnection();
+      const conn2 = await connectionManager.getConnection();
 
       expect(conn1).not.toBe(conn2);
-      expect(connectionManager["pool"].length).toBe(2);
+      expect(connectionManager.pool.length).toBe(2);
     });
 
     it("should assign unique IDs to connections", async () => {
       await connectionManager.initialize();
 
-      const conn1 = await connectionManager["getConnection"]();
-      const conn2 = await connectionManager["getConnection"]();
+      const conn1 = await connectionManager.getConnection();
+      const conn2 = await connectionManager.getConnection();
 
-      const pooledConn1 = connectionManager["pool"].find((p) => p.connection === conn1);
-      const pooledConn2 = connectionManager["pool"].find((p) => p.connection === conn2);
+      const pooledConn1 = connectionManager.pool.find((p: any) => p.connection === conn1);
+      const pooledConn2 = connectionManager.pool.find((p: any) => p.connection === conn2);
 
       expect(pooledConn1?.id).toBeDefined();
       expect(pooledConn2?.id).toBeDefined();
@@ -259,22 +259,22 @@ describe("Connection Pool Management", () => {
 
       const conns = [];
       for (let i = 0; i < 3; i++) {
-        const conn = await connectionManager["getConnection"]();
+        const conn = await connectionManager.getConnection();
         conns.push(conn);
       }
 
-      await connectionManager["close"]();
+      await connectionManager.close();
 
       conns.forEach((conn) => {
         expect(conn.close).toHaveBeenCalled();
       });
 
-      expect(connectionManager["pool"].length).toBe(0);
+      expect(connectionManager.pool.length).toBe(0);
     });
 
     it("should handle connection creation failures", async () => {
       // Mock connection creation to fail
-      connectionManager["createConnection"] = vi
+      connectionManager.createConnection = vi
         .fn()
         .mockRejectedValue(new Error("Connection failed"));
 
@@ -289,7 +289,7 @@ describe("Connection Pool Management", () => {
       // Request many connections simultaneously
       const promises = [];
       for (let i = 0; i < 10; i++) {
-        promises.push(connectionManager["getConnection"]());
+        promises.push(connectionManager.getConnection());
       }
 
       const connections = await Promise.all(promises);
@@ -300,7 +300,7 @@ describe("Connection Pool Management", () => {
 
       // All connections should be marked as in use
       connections.forEach((conn) => {
-        const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
+        const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
         expect(pooledConn?.inUse).toBe(true);
       });
     });
@@ -310,18 +310,18 @@ describe("Connection Pool Management", () => {
 
       const connections = [];
       for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager["getConnection"]());
+        connections.push(await connectionManager.getConnection());
       }
 
       // Release all connections simultaneously
       const releasePromises = connections.map((conn) =>
-        Promise.resolve(connectionManager["releaseConnection"](conn)),
+        Promise.resolve(connectionManager.releaseConnection(conn)),
       );
 
       await Promise.all(releasePromises);
 
       // All connections should be idle
-      connectionManager["pool"].forEach((pooledConn) => {
+      connectionManager.pool.forEach((pooledConn: any) => {
         expect(pooledConn.inUse).toBe(false);
       });
     });
@@ -329,16 +329,16 @@ describe("Connection Pool Management", () => {
     it("should prevent double-release of connections", async () => {
       await connectionManager.initialize();
 
-      const conn = await connectionManager["getConnection"]();
+      const conn = await connectionManager.getConnection();
 
       // Release once
-      connectionManager["releaseConnection"](conn);
+      connectionManager.releaseConnection(conn);
 
       // Try to release again - should be handled gracefully
-      expect(() => connectionManager["releaseConnection"](conn)).not.toThrow();
+      expect(() => connectionManager.releaseConnection(conn)).not.toThrow();
 
       // Connection should still be idle
-      const pooledConn = connectionManager["pool"].find((p) => p.connection === conn);
+      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
       expect(pooledConn?.inUse).toBe(false);
     });
   });
@@ -350,13 +350,13 @@ describe("Connection Pool Management", () => {
       // Fill up the pool
       const connections = [];
       for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager["getConnection"]());
+        connections.push(await connectionManager.getConnection());
       }
 
       // These should be queued
       const waitingPromises = [
-        connectionManager["getConnection"](),
-        connectionManager["getConnection"](),
+        connectionManager.getConnection(),
+        connectionManager.getConnection(),
       ];
 
       // Give them time to queue
@@ -371,7 +371,7 @@ describe("Connection Pool Management", () => {
       expect(resolved).toBe(false);
 
       // Release a connection
-      connectionManager["releaseConnection"](connections[0]);
+      connectionManager.releaseConnection(connections[0]);
 
       // First waiting request should now resolve
       const conn = await waitingPromises[0];
@@ -380,19 +380,21 @@ describe("Connection Pool Management", () => {
 
     it("should handle timeout for waiting connections", async () => {
       // Set a short timeout
-      connectionManager = new ConnectionManager({ connectionTimeout: 100 });
+      connectionManager = new ConnectionManager({
+        connectionTimeout: 100,
+      }) as any;
       await connectionManager.initialize();
 
       // Fill up the pool
       const connections = [];
       for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager["getConnection"]());
+        connections.push(await connectionManager.getConnection());
       }
 
       // This should timeout
       vi.advanceTimersByTime(101);
 
-      await expect(connectionManager["getConnection"]()).rejects.toThrow(/timeout/i);
+      await expect(connectionManager.getConnection()).rejects.toThrow(/timeout/i);
     });
 
     it("should process wait queue in FIFO order", async () => {
@@ -401,25 +403,25 @@ describe("Connection Pool Management", () => {
       // Fill up the pool
       const connections = [];
       for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager["getConnection"]());
+        connections.push(await connectionManager.getConnection());
       }
 
       // Queue multiple requests
       const order: number[] = [];
       const waitingPromises = [
-        connectionManager["getConnection"]().then(() => order.push(1)),
-        connectionManager["getConnection"]().then(() => order.push(2)),
-        connectionManager["getConnection"]().then(() => order.push(3)),
+        connectionManager.getConnection().then(() => order.push(1)),
+        connectionManager.getConnection().then(() => order.push(2)),
+        connectionManager.getConnection().then(() => order.push(3)),
       ];
 
       // Release connections one by one
-      connectionManager["releaseConnection"](connections[0]);
+      connectionManager.releaseConnection(connections[0]);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      connectionManager["releaseConnection"](connections[1]);
+      connectionManager.releaseConnection(connections[1]);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
-      connectionManager["releaseConnection"](connections[2]);
+      connectionManager.releaseConnection(connections[2]);
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       await Promise.all(waitingPromises);

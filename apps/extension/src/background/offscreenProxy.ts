@@ -19,7 +19,7 @@ const pendingRequests = new Map<
   {
     resolve: (value: unknown) => void;
     reject: (reason?: unknown) => void;
-    timeout: number;
+    timeout: ReturnType<typeof setTimeout>;
   }
 >();
 
@@ -36,7 +36,7 @@ const MESSAGE_RETRY_DELAY = 1000; // 1 second delay between retries
 export class OffscreenProxy {
   private static instance: OffscreenProxy | null = null;
   private isDocumentReady = false;
-  private heartbeatInterval: number | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
   private lastHeartbeat = 0;
 
   private constructor() {

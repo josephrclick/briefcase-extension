@@ -9,7 +9,7 @@ import { setupChromeMock, cleanupChromeMock } from "../utils/mockChromeApi";
 import { createMockRequest, createTimeoutHelper } from "../utils/messageHelpers";
 
 describe("Error Recovery Scenarios", () => {
-  let offscreenProxy: OffscreenProxy;
+  let offscreenProxy: any;
   let mockChrome: ReturnType<typeof setupChromeMock>;
   const timeoutHelper = createTimeoutHelper();
 
@@ -17,7 +17,7 @@ describe("Error Recovery Scenarios", () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockChrome = setupChromeMock();
-    offscreenProxy = OffscreenProxy.getInstance();
+    offscreenProxy = OffscreenProxy.getInstance() as any;
   });
 
   afterEach(() => {

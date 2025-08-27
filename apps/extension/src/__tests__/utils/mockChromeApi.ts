@@ -68,7 +68,7 @@ class MockChromeRuntime {
   onMessage = new MockMessageListener();
   lastError: { message: string } | null = null;
 
-  sendMessage = vi.fn((message: MockMessage, callback?: (response: unknown) => void) => {
+  sendMessage = vi.fn((_message: MockMessage, callback?: (response: unknown) => void) => {
     if (callback) {
       callback({ success: true });
     }

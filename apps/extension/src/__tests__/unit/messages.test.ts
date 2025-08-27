@@ -9,12 +9,11 @@ import {
   createErrorResponse,
   generateMessageId,
   type RequestMessage,
-  type ResponseMessage,
   MessageSource,
 } from "../../types/messages";
 import { MessageType } from "../../offscreen/offscreen";
 import { setupChromeMock, cleanupChromeMock } from "../utils/mockChromeApi";
-import { createMockRequest, createMessageSpy } from "../utils/messageHelpers";
+import { createMockRequest } from "../utils/messageHelpers";
 
 describe("Message Protocol Validation", () => {
   let mockChrome: ReturnType<typeof setupChromeMock>;
