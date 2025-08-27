@@ -11,6 +11,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         sidepanel: "src/sidepanel/index.html",
+        offscreen: "src/offscreen/offscreen.html",
       },
     },
   },
@@ -18,5 +19,13 @@ export default defineConfig({
     alias: {
       "@": "./src",
     },
+  },
+  // Configure asset handling for WASM and worker files
+  assetsInclude: ["**/*.wasm"],
+  optimizeDeps: {
+    exclude: ["@sqlite.org/sqlite-wasm"],
+  },
+  worker: {
+    format: "es",
   },
 });

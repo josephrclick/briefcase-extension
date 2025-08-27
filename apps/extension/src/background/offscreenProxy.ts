@@ -6,6 +6,23 @@
 
 import { MessageType } from "../offscreen/offscreen";
 import type { RequestMessage, ResponseMessage } from "../types/messages";
+import {
+  DbSearchRequest,
+  DbDeleteAllRequest,
+  DbGetHistoryRequest,
+  DbExportDocumentsRequest,
+  DbSearchResponse,
+  DbDeleteAllResponse,
+  DbGetHistoryResponse,
+  DbExportProgress,
+  DbExportChunk,
+  DbCancelExportRequest,
+  ExportFormat,
+  generateExportId,
+} from "../types/database";
+import { StreamManager, StreamReader } from "../types/streaming";
+import { createExtendedError } from "../types/errors";
+import { DbErrorCode } from "../types/database";
 
 // Offscreen document configuration
 const OFFSCREEN_DOCUMENT_PATH = "src/offscreen/offscreen.html";
@@ -435,6 +452,184 @@ export class OffscreenProxy {
       timestamp: Date.now(),
       payload: score,
     }) as Promise<{ id: number; changes: number }>;
+  }
+
+  /**
+   * Search database with full-text search
+   */
+  async searchDatabase(
+    query: string,
+    options?: {
+      limit?: number;
+      offset?: number;
+      sortBy?: "relevance" | "date" | "title";
+      sortOrder?: "asc" | "desc";
+    },
+  ): Promise<DbSearchResponse["data"]> {
+    const request: DbSearchRequest = {
+      type: MessageType.DB_SEARCH,
+      id: `search-${Date.now()}`,
+      timestamp: Date.now(),
+      payload: {
+        query,
+        ...options,
+      },
+    };
+
+    const response = await this.sendMessage(request);
+    return response as DbSearchResponse["data"];
+  }
+
+  /**
+   * Delete all data from database
+   */
+  async deleteAllData(confirm = false): Promise<DbDeleteAllResponse["data"]> {
+    if (!confirm) {
+      throw createExtendedError(
+        DbErrorCode.INVALID_REQUEST,
+        "Deletion must be explicitly confirmed",
+      );
+    }
+
+    const request: DbDeleteAllRequest = {
+      type: MessageType.DB_DELETE_ALL_DATA,
+      id: `delete-all-${Date.now()}`,
+      timestamp: Date.now(),
+      payload: { confirm },
+    };
+
+    const response = await this.sendMessage(request);
+    return response as DbDeleteAllResponse["data"];
+  }
+
+  /**
+   * Get document history with filters
+   */
+  async getHistory(options?: {
+    limit?: number;
+    offset?: number;
+    dateRange?: { start: Date | string; end: Date | string };
+    site?: string;
+    hasComments?: boolean;
+  }): Promise<DbGetHistoryResponse["data"]> {
+    const request: DbGetHistoryRequest = {
+      type: MessageType.DB_GET_HISTORY,
+      id: `history-${Date.now()}`,
+      timestamp: Date.now(),
+      payload: options,
+    };
+
+    const response = await this.sendMessage(request);
+    return response as DbGetHistoryResponse["data"];
+  }
+
+  /**
+   * Export documents with streaming support
+   */
+  async exportDocuments(
+    format: ExportFormat,
+    options?: {
+      filters?: {
+        dateRange?: { start: Date | string; end: Date | string };
+        tags?: string[];
+        sites?: string[];
+        contentType?: string;
+        searchQuery?: string;
+      };
+      chunkSize?: number;
+      compress?: boolean;
+      includeMetadata?: boolean;
+      includeRawText?: boolean;
+      includeSummaries?: boolean;
+    },
+    onProgress?: (progress: DbExportProgress) => void,
+    onChunk?: (chunk: DbExportChunk) => void,
+  ): Promise<string> {
+    const exportId = generateExportId("export");
+    const streamManager = new StreamManager();
+    const streamReader = new StreamReader();
+
+    // Create stream for handling chunks
+    const streamId = await streamManager.createStream({
+      id: exportId,
+      type: "export",
+      onProgress,
+      onChunk: (chunk) => {
+        streamReader.processChunk(chunk);
+        if (onChunk) {
+          onChunk(chunk);
+        }
+      },
+    });
+
+    // Send export request
+    const request: DbExportDocumentsRequest = {
+      type: MessageType.DB_EXPORT_DOCUMENTS,
+      id: `export-${Date.now()}`,
+      timestamp: Date.now(),
+      payload: {
+        format,
+        filters: options?.filters,
+        options: {
+          chunkSize: options?.chunkSize,
+          compress: options?.compress,
+          includeMetadata: options?.includeMetadata,
+          includeRawText: options?.includeRawText,
+          includeSummaries: options?.includeSummaries,
+        },
+        exportId,
+      },
+    };
+
+    // Start export
+    await this.sendMessage(request);
+
+    // Wait for completion
+    return new Promise((resolve, reject) => {
+      const checkInterval = setInterval(() => {
+        if (streamReader.isComplete()) {
+          clearInterval(checkInterval);
+          const data = streamReader.getData();
+          if (data) {
+            resolve(data);
+          } else {
+            reject(createExtendedError(DbErrorCode.EXPORT_INTERRUPTED, "No data received"));
+          }
+        }
+
+        const state = streamManager.getStreamState(streamId);
+        if (state && state.status === "error") {
+          clearInterval(checkInterval);
+          reject(createExtendedError(DbErrorCode.EXPORT_INTERRUPTED, "Export failed"));
+        }
+      }, 100);
+
+      // Set timeout
+      setTimeout(
+        () => {
+          clearInterval(checkInterval);
+          reject(createExtendedError(DbErrorCode.TIMEOUT, "Export timeout"));
+        },
+        5 * 60 * 1000,
+      ); // 5 minutes
+    });
+  }
+
+  /**
+   * Cancel an ongoing export
+   */
+  async cancelExport(exportId: string, reason?: string): Promise<void> {
+    const request: DbCancelExportRequest = {
+      type: MessageType.DB_CANCEL_EXPORT,
+      id: `cancel-export-${Date.now()}`,
+      timestamp: Date.now(),
+      payload: {
+        exportId,
+        reason,
+      },
+    };
+
+    await this.sendMessage(request);
   }
 
   /**

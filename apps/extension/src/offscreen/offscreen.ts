@@ -5,6 +5,54 @@
  */
 
 import { ConnectionManager } from "./connectionManager";
+import {
+  DbSearchRequest,
+  DbDeleteAllRequest,
+  DbGetHistoryRequest,
+  DbExportDocumentsRequest,
+  DbCancelExportRequest,
+  DbExportChunk,
+  DbExportCompleteResponse,
+  generateExportId,
+} from "../types/database";
+import { ProgressReporter } from "../types/streaming";
+import {
+  createExtendedError,
+  DbErrorCode,
+  errorLogger,
+  securityLogger,
+  SecurityEventType,
+} from "../types/errors";
+
+// Database row type definitions for type safety
+interface DocumentRow {
+  id: number;
+  url: string;
+  title: string;
+  site: string;
+  saved_at: string;
+  word_count: number;
+  hash: string;
+  raw_text: string;
+}
+
+interface DocumentWithSummaryCount extends DocumentRow {
+  summary_count: number;
+  last_accessed?: string;
+}
+
+interface SearchResultRow extends Omit<DocumentRow, "hash" | "raw_text"> {
+  snippet: string;
+  score: number;
+}
+
+interface CountRow {
+  count: number;
+}
+
+interface TotalRow {
+  total: number;
+}
 
 // Message types for communication with service worker and UI
 export enum MessageType {
@@ -14,6 +62,9 @@ export enum MessageType {
   DB_EXECUTE = "DB_EXECUTE",
   DB_TRANSACTION = "DB_TRANSACTION",
   DB_CLOSE = "DB_CLOSE",
+  DB_SEARCH = "DB_SEARCH",
+  DB_DELETE_ALL_DATA = "DB_DELETE_ALL_DATA",
+  DB_GET_HISTORY = "DB_GET_HISTORY",
 
   // Document operations
   DOC_INSERT = "DOC_INSERT",
@@ -32,9 +83,25 @@ export enum MessageType {
   AB_SCORE_INSERT = "AB_SCORE_INSERT",
   AB_GET_RESULTS = "AB_GET_RESULTS",
 
+  // Export operations
+  DB_EXPORT_DOCUMENTS = "DB_EXPORT_DOCUMENTS",
+  DB_EXPORT_PROGRESS = "DB_EXPORT_PROGRESS",
+  DB_EXPORT_CHUNK = "DB_EXPORT_CHUNK",
+  DB_CANCEL_EXPORT = "DB_CANCEL_EXPORT",
+  DB_EXPORT_STARTED = "DB_EXPORT_STARTED",
+  DB_EXPORT_COMPLETE = "DB_EXPORT_COMPLETE",
+  DB_EXPORT_CANCELLED = "DB_EXPORT_CANCELLED",
+
+  // Stream control
+  STREAM_CONTROL = "STREAM_CONTROL",
+
   // Response types
   SUCCESS = "SUCCESS",
   ERROR = "ERROR",
+  DB_ERROR = "DB_ERROR",
+  DB_SEARCH_RESPONSE = "DB_SEARCH_RESPONSE",
+  DB_GET_HISTORY_RESPONSE = "DB_GET_HISTORY_RESPONSE",
+  DB_DELETE_ALL_RESPONSE = "DB_DELETE_ALL_RESPONSE",
   HEARTBEAT = "HEARTBEAT",
 }
 
@@ -124,6 +191,21 @@ class OffscreenDocument {
 
         case MessageType.AB_SCORE_INSERT:
           return await this.handleAbScoreInsert(message);
+
+        case MessageType.DB_SEARCH:
+          return await this.handleDbSearch(message);
+
+        case MessageType.DB_DELETE_ALL_DATA:
+          return await this.handleDbDeleteAll(message);
+
+        case MessageType.DB_GET_HISTORY:
+          return await this.handleDbGetHistory(message);
+
+        case MessageType.DB_EXPORT_DOCUMENTS:
+          return await this.handleDbExport(message);
+
+        case MessageType.DB_CANCEL_EXPORT:
+          return await this.handleDbCancelExport(message);
 
         case MessageType.HEARTBEAT:
           return this.createSuccessResponse(message, {
@@ -278,7 +360,7 @@ class OffscreenDocument {
 
     const result = await this.connectionManager.query(sql, params);
 
-    return this.createSuccessResponse(message, result.rows[0] || null);
+    return this.createSuccessResponse(message, result[0] || null);
   }
 
   private async handleDocumentSearch(message: RequestMessage): Promise<ResponseMessage> {
@@ -308,8 +390,8 @@ class OffscreenDocument {
     const result = await this.connectionManager.query(sql, [query, limit, offset]);
 
     return this.createSuccessResponse(message, {
-      results: result.rows,
-      count: result.rows.length,
+      results: result,
+      count: result.length,
     });
   }
 
@@ -366,7 +448,7 @@ class OffscreenDocument {
 
     const result = await this.connectionManager.query(sql, params);
 
-    return this.createSuccessResponse(message, id ? result.rows[0] || null : result.rows);
+    return this.createSuccessResponse(message, id ? result[0] || null : result);
   }
 
   private async handleAbRunInsert(message: RequestMessage): Promise<ResponseMessage> {
@@ -429,6 +511,543 @@ class OffscreenDocument {
     });
   }
 
+  // Whitelist of allowed sort columns to prevent SQL injection
+  private readonly ALLOWED_SORT_COLUMNS: Record<string, string> = {
+    relevance: "rank",
+    date: "d.saved_at",
+    title: "d.title",
+  };
+
+  private readonly ALLOWED_SORT_ORDERS = ["asc", "desc"] as const;
+
+  private async handleDbSearch(message: RequestMessage): Promise<ResponseMessage> {
+    await this.ensureInitialized();
+
+    const {
+      query,
+      limit = 20,
+      offset = 0,
+      sortBy = "relevance",
+      sortOrder = "desc",
+    } = message.payload as DbSearchRequest["payload"];
+
+    // Validate sort parameters to prevent SQL injection
+    if (sortBy && !this.ALLOWED_SORT_COLUMNS[sortBy]) {
+      securityLogger.logSqlInjectionAttempt(sortBy, { operation: "search", field: "sortBy" });
+    }
+    const safeColumn = this.ALLOWED_SORT_COLUMNS[sortBy] || this.ALLOWED_SORT_COLUMNS.relevance;
+    const safeOrder = this.ALLOWED_SORT_ORDERS.includes(sortOrder as "asc" | "desc")
+      ? sortOrder.toUpperCase()
+      : "DESC";
+
+    // Build SQL query with FTS5 - using safe column and order
+    const sql = `
+      SELECT 
+        d.id, d.url, d.title, d.site, d.saved_at, d.word_count,
+        snippet(doc_fts, 0, '<mark>', '</mark>', '...', 30) as snippet,
+        rank as score
+      FROM doc_fts
+      JOIN documents d ON d.id = doc_fts.rowid
+      WHERE doc_fts MATCH ?
+      ORDER BY ${safeColumn} ${safeOrder}
+      LIMIT ? OFFSET ?
+    `;
+
+    const result = await this.connectionManager.query(sql, [query, limit, offset]);
+
+    // Get total count with proper typing
+    const countResult = await this.connectionManager.query(
+      "SELECT COUNT(*) as total FROM doc_fts WHERE doc_fts MATCH ?",
+      [query],
+    );
+
+    const total = (countResult[0] as TotalRow)?.total || 0;
+
+    const response: ResponseMessage = {
+      type: MessageType.DB_SEARCH_RESPONSE,
+      id: message.id,
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        results: result as SearchResultRow[],
+        meta: {
+          total,
+          returned: result.length,
+          offset,
+          executionTime: Date.now() - message.timestamp,
+          hasMore: offset + limit < total,
+        },
+      },
+    };
+
+    return response;
+  }
+
+  private async handleDbDeleteAll(message: RequestMessage): Promise<ResponseMessage> {
+    await this.ensureInitialized();
+
+    const { confirm } = (message.payload as DbDeleteAllRequest["payload"]) || {};
+
+    if (!confirm) {
+      securityLogger.log({
+        type: SecurityEventType.SUSPICIOUS_ACTIVITY,
+        message: "Delete all data attempted without confirmation",
+      });
+      throw createExtendedError(DbErrorCode.INVALID_REQUEST, "Deletion must be confirmed");
+    }
+
+    // Log the deletion operation
+    securityLogger.log({
+      type: SecurityEventType.SUSPICIOUS_ACTIVITY,
+      message: "Delete all data operation executed",
+      context: { confirmed: true },
+    });
+
+    // Get counts before deletion with proper typing
+    const docCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM documents");
+    const sumCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM summaries");
+    const abRunCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM ab_runs");
+    const abScoreCount = await this.connectionManager.query(
+      "SELECT COUNT(*) as count FROM ab_scores",
+    );
+
+    // Delete all data in transaction
+    await this.connectionManager.transaction(async (conn) => {
+      await conn.execute("DELETE FROM ab_scores");
+      await conn.execute("DELETE FROM ab_runs");
+      await conn.execute("DELETE FROM summaries");
+      await conn.execute("DELETE FROM doc_fts");
+      await conn.execute("DELETE FROM documents");
+    });
+
+    const counts = {
+      documents: (docCount[0] as CountRow).count,
+      summaries: (sumCount[0] as CountRow).count,
+      abRuns: (abRunCount[0] as CountRow).count,
+      abScores: (abScoreCount[0] as CountRow).count,
+    };
+
+    const response: ResponseMessage = {
+      type: MessageType.DB_DELETE_ALL_RESPONSE,
+      id: message.id,
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        deletedCounts: {
+          ...counts,
+          total: counts.documents + counts.summaries + counts.abRuns + counts.abScores,
+        },
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    return response;
+  }
+
+  private async handleDbGetHistory(message: RequestMessage): Promise<ResponseMessage> {
+    await this.ensureInitialized();
+
+    const payload = message.payload as DbGetHistoryRequest["payload"] | undefined;
+    const limit = payload?.limit ?? 50;
+    const offset = payload?.offset ?? 0;
+    const dateRange = payload?.dateRange;
+    const site = payload?.site;
+    const hasComments = payload?.hasComments;
+
+    let sql = `
+      SELECT 
+        d.id, d.url, d.title, d.site, d.saved_at, d.word_count,
+        COUNT(DISTINCT s.id) as summary_count,
+        MAX(s.created_at) as last_accessed
+      FROM documents d
+      LEFT JOIN summaries s ON s.document_id = d.id
+      WHERE 1=1
+    `;
+
+    const params: unknown[] = [];
+
+    // Add filters
+    if (dateRange) {
+      sql += " AND d.saved_at BETWEEN ? AND ?";
+      params.push(dateRange.start, dateRange.end);
+    }
+
+    if (site) {
+      sql += " AND d.site = ?";
+      params.push(site);
+    }
+
+    if (hasComments !== undefined) {
+      if (hasComments) {
+        sql += " AND EXISTS (SELECT 1 FROM summaries WHERE document_id = d.id)";
+      } else {
+        sql += " AND NOT EXISTS (SELECT 1 FROM summaries WHERE document_id = d.id)";
+      }
+    }
+
+    sql += " GROUP BY d.id ORDER BY d.saved_at DESC LIMIT ? OFFSET ?";
+    params.push(limit, offset);
+
+    const result = await this.connectionManager.query(sql, params);
+
+    // Get total count
+    let countSql = "SELECT COUNT(*) as total FROM documents WHERE 1=1";
+    const countParams: unknown[] = [];
+
+    if (dateRange) {
+      countSql += " AND saved_at BETWEEN ? AND ?";
+      countParams.push(dateRange.start, dateRange.end);
+    }
+
+    if (site) {
+      countSql += " AND site = ?";
+      countParams.push(site);
+    }
+
+    const countResult = await this.connectionManager.query(countSql, countParams);
+    const total = (countResult[0] as TotalRow)?.total || 0;
+
+    const response: ResponseMessage = {
+      type: MessageType.DB_GET_HISTORY_RESPONSE,
+      id: message.id,
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        documents: result.map((row: unknown) => {
+          const typedRow = row as DocumentWithSummaryCount;
+          return {
+            ...typedRow,
+            hasSummary: typedRow.summary_count > 0,
+            summaryCount: typedRow.summary_count,
+          };
+        }),
+        meta: {
+          total,
+          returned: result.length,
+          offset,
+          hasMore: offset + limit < total,
+        },
+      },
+    };
+
+    return response;
+  }
+
+  // Export management with resource limits and cleanup
+  private readonly MAX_CONCURRENT_EXPORTS = 3;
+  private readonly EXPORT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  private activeExports = new Map<
+    string,
+    {
+      controller: AbortController;
+      startTime: number;
+      timeoutId: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  private cleanupStaleExports(): void {
+    const now = Date.now();
+    for (const [id, exportInfo] of this.activeExports) {
+      if (now - exportInfo.startTime > this.EXPORT_TIMEOUT_MS) {
+        securityLogger.logExportTimeout(id, now - exportInfo.startTime);
+        console.warn(`[Offscreen] Cleaning up stale export: ${id}`);
+        this.cancelExport(id, "Timeout");
+      }
+    }
+  }
+
+  private async handleDbExport(message: RequestMessage): Promise<ResponseMessage> {
+    await this.ensureInitialized();
+
+    // Check concurrent export limit
+    this.cleanupStaleExports();
+    if (this.activeExports.size >= this.MAX_CONCURRENT_EXPORTS) {
+      securityLogger.logResourceLimitExceeded(
+        "concurrent_exports",
+        this.MAX_CONCURRENT_EXPORTS,
+        this.activeExports.size + 1,
+      );
+      throw createExtendedError(
+        DbErrorCode.QUOTA_EXCEEDED,
+        `Maximum concurrent exports (${this.MAX_CONCURRENT_EXPORTS}) reached. Please wait for existing exports to complete.`,
+      );
+    }
+
+    const request = message.payload as DbExportDocumentsRequest["payload"];
+    const exportId = request.exportId || generateExportId("export");
+    const abortController = new AbortController();
+
+    // Set up automatic timeout with security logging
+    const timeoutId = setTimeout(() => {
+      securityLogger.logExportTimeout(exportId, this.EXPORT_TIMEOUT_MS);
+      console.warn(`[Offscreen] Export ${exportId} timed out`);
+      this.cancelExport(exportId, "Timeout");
+    }, this.EXPORT_TIMEOUT_MS);
+
+    // Track export with cleanup info
+    this.activeExports.set(exportId, {
+      controller: abortController,
+      startTime: Date.now(),
+      timeoutId,
+    });
+
+    // Send export started response
+    const startResponse: ResponseMessage = {
+      type: MessageType.DB_EXPORT_STARTED,
+      id: message.id,
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        exportId,
+        estimatedDocuments: 0, // Will be calculated
+        format: request.format,
+        startTime: new Date().toISOString(),
+      },
+    };
+
+    // Start export in background with cleanup on completion
+    this.performExport(exportId, request, abortController.signal)
+      .finally(() => {
+        this.cleanupExport(exportId);
+      })
+      .catch((error) => {
+        errorLogger.log(error);
+        this.sendExportError(exportId, error);
+      });
+
+    return startResponse;
+  }
+
+  private async performExport(
+    exportId: string,
+    request: DbExportDocumentsRequest["payload"],
+    signal: AbortSignal,
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    // Build query based on filters
+    let sql = "SELECT * FROM documents WHERE 1=1";
+    const params: unknown[] = [];
+
+    if (request.filters?.dateRange) {
+      sql += " AND saved_at BETWEEN ? AND ?";
+      params.push(request.filters.dateRange.start, request.filters.dateRange.end);
+    }
+
+    if (request.filters?.sites?.length) {
+      sql += ` AND site IN (${request.filters.sites.map(() => "?").join(", ")})`;
+      params.push(...request.filters.sites);
+    }
+
+    if (request.filters?.searchQuery) {
+      sql += " AND id IN (SELECT rowid FROM doc_fts WHERE doc_fts MATCH ?)";
+      params.push(request.filters.searchQuery);
+    }
+
+    // Get total count
+    const countResult = await this.connectionManager.query(
+      sql.replace("SELECT *", "SELECT COUNT(*) as total"),
+      params,
+    );
+    const totalDocuments = (countResult[0] as TotalRow)?.total || 0;
+
+    // Create progress reporter
+    const progressReporter = new ProgressReporter(
+      totalDocuments,
+      (progress) => {
+        chrome.runtime.sendMessage(progress).catch(() => {
+          // Ignore if service worker is not available
+        });
+      },
+      exportId,
+    );
+
+    // Fetch documents in chunks
+    const chunkSize = request.options?.chunkSize || 100;
+    let processedCount = 0;
+    let exportData: string = "";
+
+    for (let offset = 0; offset < totalDocuments; offset += chunkSize) {
+      if (signal.aborted) {
+        throw createExtendedError(DbErrorCode.EXPORT_INTERRUPTED, "Export cancelled");
+      }
+
+      const chunkResult = await this.connectionManager.query(`${sql} LIMIT ? OFFSET ?`, [
+        ...params,
+        chunkSize,
+        offset,
+      ]);
+
+      // Format data based on export format
+      let chunkData = "";
+      switch (request.format) {
+        case "json":
+          chunkData = JSON.stringify(chunkResult, null, 2);
+          break;
+        case "csv":
+          chunkData = this.convertToCSV(chunkResult);
+          break;
+        case "markdown":
+          chunkData = this.convertToMarkdown(chunkResult);
+          break;
+      }
+
+      // Send chunk
+      const chunk: DbExportChunk = {
+        type: MessageType.DB_EXPORT_CHUNK,
+        id: generateExportId("chunk"),
+        timestamp: Date.now(),
+        success: true,
+        payload: {
+          exportId,
+          sequenceNumber: Math.floor(offset / chunkSize),
+          chunk: chunkData,
+          encoding: "utf8",
+          isFirst: offset === 0,
+          isLast: offset + chunkSize >= totalDocuments,
+          metadata:
+            offset === 0
+              ? {
+                  totalChunks: Math.ceil(totalDocuments / chunkSize),
+                  totalSize: 0, // Will be calculated
+                  mimeType: this.getMimeType(request.format),
+                }
+              : undefined,
+        },
+      };
+
+      chrome.runtime.sendMessage(chunk).catch(() => {
+        // Ignore if service worker is not available
+      });
+
+      processedCount += chunkResult.length;
+      progressReporter.update(processedCount, "exporting");
+      exportData += chunkData;
+    }
+
+    // Send completion
+    const completeResponse: DbExportCompleteResponse = {
+      type: MessageType.DB_EXPORT_COMPLETE,
+      id: generateExportId("complete"),
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        exportId,
+        totalDocuments,
+        totalSize: exportData.length,
+        duration: Date.now() - startTime,
+        format: request.format,
+        chunks: Math.ceil(totalDocuments / chunkSize),
+      },
+    };
+
+    chrome.runtime.sendMessage(completeResponse).catch(() => {
+      // Ignore if service worker is not available
+    });
+
+    progressReporter.complete();
+    this.cleanupExport(exportId);
+  }
+
+  private cleanupExport(exportId: string): void {
+    const exportInfo = this.activeExports.get(exportId);
+    if (exportInfo) {
+      clearTimeout(exportInfo.timeoutId);
+      this.activeExports.delete(exportId);
+      console.log(`[Offscreen] Cleaned up export: ${exportId}`);
+    }
+  }
+
+  private cancelExport(exportId: string, reason?: string): void {
+    const exportInfo = this.activeExports.get(exportId);
+    if (exportInfo) {
+      exportInfo.controller.abort(reason);
+      this.cleanupExport(exportId);
+    }
+  }
+
+  private async handleDbCancelExport(message: RequestMessage): Promise<ResponseMessage> {
+    const { exportId, reason } = message.payload as DbCancelExportRequest["payload"];
+    this.cancelExport(exportId, reason);
+
+    const response: ResponseMessage = {
+      type: MessageType.DB_EXPORT_CANCELLED,
+      id: message.id,
+      timestamp: Date.now(),
+      success: true,
+      data: {
+        exportId,
+        documentsProcessed: 0, // Would need to track this
+        partialDataAvailable: false,
+      },
+    };
+
+    return response;
+  }
+
+  private convertToCSV(rows: unknown[]): string {
+    if (!rows.length) return "";
+
+    const headers = Object.keys(rows[0] as Record<string, unknown>);
+    const csvRows = [headers.join(",")];
+
+    for (const row of rows) {
+      const values = headers.map((h) => {
+        const value = (row as Record<string, unknown>)[h];
+        return typeof value === "string" ? `"${value.replace(/"/g, '""')}"` : String(value);
+      });
+      csvRows.push(values.join(","));
+    }
+
+    return csvRows.join("\n");
+  }
+
+  private convertToMarkdown(rows: unknown[]): string {
+    if (!rows.length) return "";
+
+    const headers = Object.keys(rows[0] as Record<string, unknown>);
+    let md = "| " + headers.join(" | ") + " |\n";
+    md += "| " + headers.map(() => "---").join(" | ") + " |\n";
+
+    for (const row of rows) {
+      const values = headers.map((h) => String((row as Record<string, unknown>)[h] || ""));
+      md += "| " + values.join(" | ") + " |\n";
+    }
+
+    return md;
+  }
+
+  private getMimeType(format: string): string {
+    switch (format) {
+      case "json":
+        return "application/json";
+      case "csv":
+        return "text/csv";
+      case "markdown":
+        return "text/markdown";
+      default:
+        return "text/plain";
+    }
+  }
+
+  private sendExportError(exportId: string, error: unknown): void {
+    const errorResponse = {
+      type: MessageType.DB_ERROR,
+      id: generateExportId("error"),
+      timestamp: Date.now(),
+      success: false,
+      error: {
+        code: DbErrorCode.EXPORT_INTERRUPTED,
+        message: error instanceof Error ? error.message : String(error),
+        context: { exportId },
+      },
+    };
+
+    chrome.runtime.sendMessage(errorResponse).catch(() => {
+      // Ignore if service worker is not available
+    });
+  }
+
   private createSuccessResponse(request: RequestMessage, data?: unknown): ResponseMessage {
     return {
       type: MessageType.SUCCESS,
@@ -476,4 +1095,7 @@ class OffscreenDocument {
 }
 
 // Initialize the offscreen document
-new OffscreenDocument();
+// Only initialize when running in actual Chrome extension context
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+  new OffscreenDocument();
+}

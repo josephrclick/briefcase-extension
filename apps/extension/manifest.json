@@ -32,5 +32,16 @@
       "js": ["src/contentScript.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "packages/db/sqlite3/*.wasm",
+        "packages/db/sqlite3/*.js",
+        "packages/db/sqlite3/*.mjs",
+        "src/offscreen/offscreen.html"
+      ],
+      "matches": ["<all_urls>"]
+    }
   ]
 }
