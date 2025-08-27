@@ -76,9 +76,9 @@ export class SQLiteWrapper implements Database {
     try {
       // Dynamic import to work with bundlers
       // @ts-expect-error - SQLite WASM module doesn't have TypeScript declarations
-      const sqlite3Module = await import("../../packages/db/sqlite3/sqlite3-bundler-friendly.mjs");
+      const sqlite3Module = await import("./sqlite3/sqlite3-bundler-friendly.mjs");
 
-      // Initialize SQLite3 module
+      // Initialize SQLite3 module with OPFS support
       const sqlite3: SQLite3Module = await sqlite3Module.default({
         print: console.log,
         printErr: console.error,
@@ -89,7 +89,12 @@ export class SQLiteWrapper implements Database {
       // Open database with OPFS if available
       if (this.useOPFS && sqlite3.oo1.OpfsDb) {
         console.log("Using OPFS for persistent storage");
-        this.db = new sqlite3.oo1.OpfsDb("file:briefcase.db?vfs=opfs");
+        // Use OPFS with proper VFS initialization
+        this.db = new sqlite3.oo1.DB("file:briefcase.db?vfs=opfs", "c");
+      } else if (this.useOPFS && sqlite3.capi) {
+        // Fallback to manual OPFS setup if OpfsDb is not available
+        console.log("Setting up OPFS manually");
+        this.db = new sqlite3.oo1.DB("file:briefcase.db?vfs=opfs", "c");
       } else {
         console.log("Using in-memory database");
         this.db = new sqlite3.oo1.DB(":memory:", "c");
@@ -100,7 +105,12 @@ export class SQLiteWrapper implements Database {
       await this.executeDirect("PRAGMA foreign_keys=ON");
       await this.executeDirect("PRAGMA synchronous=NORMAL");
       await this.executeDirect("PRAGMA temp_store=MEMORY");
-      await this.executeDirect("PRAGMA mmap_size=30000000000");
+      // Note: mmap_size might not be supported in WASM build
+      try {
+        await this.executeDirect("PRAGMA mmap_size=30000000000");
+      } catch (error) {
+        console.warn("PRAGMA mmap_size not supported:", error);
+      }
 
       // Load schema
       const schema = await this.loadSchema();

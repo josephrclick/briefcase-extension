@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test SQLite WASM</title>
+  </head>
+  <body>
+    <h1>SQLite WASM Test</h1>
+    <div id="output"></div>
+
+    <script type="module">
+      const output = document.getElementById("output");
+
+      async function testSQLite() {
+        try {
+          output.innerHTML += "<p>Loading SQLite WASM module...</p>";
+
+          // Import the SQLite module
+          const sqlite3Module = await import("./packages/db/sqlite3/sqlite3-bundler-friendly.mjs");
+
+          // Initialize SQLite
+          const sqlite3 = await sqlite3Module.default({
+            print: (msg) => {
+              console.log(msg);
+              output.innerHTML += `<p>LOG: ${msg}</p>`;
+            },
+            printErr: (msg) => {
+              console.error(msg);
+              output.innerHTML += `<p style="color: red;">ERROR: ${msg}</p>`;
+            },
+          });
+
+          output.innerHTML += `<p style="color: green;">✓ SQLite version: ${sqlite3.version.libVersion}</p>`;
+
+          // Test OPFS availability
+          if (sqlite3.oo1.OpfsDb) {
+            output.innerHTML += '<p style="color: green;">✓ OPFS support available</p>';
+          } else {
+            output.innerHTML +=
+              '<p style="color: orange;">⚠ OPFS support not available (OpfsDb)</p>';
+          }
+
+          // Try creating a database
+          const db = new sqlite3.oo1.DB(":memory:", "c");
+          output.innerHTML += '<p style="color: green;">✓ In-memory database created</p>';
+
+          // Run a simple query
+          db.exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)");
+          db.exec("INSERT INTO test (name) VALUES ('test')");
+          const result = db.exec("SELECT * FROM test", {
+            rowMode: "object",
+            returnValue: "resultRows",
+          });
+
+          output.innerHTML += `<p style="color: green;">✓ Query result: ${JSON.stringify(result)}</p>`;
+
+          // Check FTS5 support
+          try {
+            db.exec("CREATE VIRTUAL TABLE test_fts USING fts5(content)");
+            output.innerHTML += '<p style="color: green;">✓ FTS5 support confirmed</p>';
+          } catch (error) {
+            output.innerHTML += `<p style="color: red;">✗ FTS5 not available: ${error.message}</p>`;
+          }
+
+          db.close();
+          output.innerHTML += '<p style="color: green;">✓ Database closed successfully</p>';
+        } catch (error) {
+          output.innerHTML += `<p style="color: red;">Error: ${error.message}</p>`;
+          console.error(error);
+        }
+      }
+
+      testSQLite();
+    </script>
+  </body>
+</html>
