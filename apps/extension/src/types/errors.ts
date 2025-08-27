@@ -448,6 +448,181 @@ export class ErrorLogger {
 export const errorLogger = new ErrorLogger();
 
 /**
+ * Security event types for logging
+ */
+export enum SecurityEventType {
+  SQL_INJECTION_ATTEMPT = "SQL_INJECTION_ATTEMPT",
+  RESOURCE_LIMIT_EXCEEDED = "RESOURCE_LIMIT_EXCEEDED",
+  EXPORT_TIMEOUT = "EXPORT_TIMEOUT",
+  UNAUTHORIZED_ACCESS = "UNAUTHORIZED_ACCESS",
+  INVALID_INPUT = "INVALID_INPUT",
+  SUSPICIOUS_ACTIVITY = "SUSPICIOUS_ACTIVITY",
+}
+
+/**
+ * Security event for logging
+ */
+export interface SecurityEvent {
+  type: SecurityEventType;
+  severity: ErrorSeverity;
+  timestamp: number;
+  message: string;
+  context?: Record<string, unknown>;
+  userId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+/**
+ * Security logger for tracking security-relevant events
+ */
+export class SecurityLogger {
+  private events: SecurityEvent[] = [];
+  private maxEvents = 1000;
+  private listeners: ((event: SecurityEvent) => void)[] = [];
+
+  /**
+   * Log a security event
+   */
+  log(event: Partial<SecurityEvent> & Pick<SecurityEvent, "type" | "message">): void {
+    const fullEvent: SecurityEvent = {
+      severity: this.getSeverityForType(event.type),
+      timestamp: Date.now(),
+      ...event,
+    };
+
+    this.events.unshift(fullEvent);
+
+    // Limit event history
+    if (this.events.length > this.maxEvents) {
+      this.events = this.events.slice(0, this.maxEvents);
+    }
+
+    // Log to console with appropriate level
+    const prefix = `[SECURITY:${event.type}]`;
+    switch (fullEvent.severity) {
+      case ErrorSeverity.CRITICAL:
+        console.error(prefix, fullEvent);
+        break;
+      case ErrorSeverity.ERROR:
+        console.error(prefix, fullEvent);
+        break;
+      case ErrorSeverity.WARNING:
+        console.warn(prefix, fullEvent);
+        break;
+      case ErrorSeverity.INFO:
+        console.info(prefix, fullEvent);
+        break;
+    }
+
+    // Notify listeners
+    this.listeners.forEach((listener) => listener(fullEvent));
+  }
+
+  /**
+   * Log a SQL injection attempt
+   */
+  logSqlInjectionAttempt(input: string, context?: Record<string, unknown>): void {
+    this.log({
+      type: SecurityEventType.SQL_INJECTION_ATTEMPT,
+      message: `Potential SQL injection attempt detected: ${input}`,
+      context: { ...context, input },
+    });
+  }
+
+  /**
+   * Log resource limit exceeded
+   */
+  logResourceLimitExceeded(resource: string, limit: number, requested: number): void {
+    this.log({
+      type: SecurityEventType.RESOURCE_LIMIT_EXCEEDED,
+      message: `Resource limit exceeded for ${resource}`,
+      context: { resource, limit, requested },
+    });
+  }
+
+  /**
+   * Log export timeout
+   */
+  logExportTimeout(exportId: string, duration: number): void {
+    this.log({
+      type: SecurityEventType.EXPORT_TIMEOUT,
+      message: `Export ${exportId} timed out after ${duration}ms`,
+      context: { exportId, duration },
+    });
+  }
+
+  /**
+   * Get severity for security event type
+   */
+  private getSeverityForType(type: SecurityEventType): ErrorSeverity {
+    switch (type) {
+      case SecurityEventType.SQL_INJECTION_ATTEMPT:
+      case SecurityEventType.UNAUTHORIZED_ACCESS:
+        return ErrorSeverity.CRITICAL;
+      case SecurityEventType.SUSPICIOUS_ACTIVITY:
+        return ErrorSeverity.ERROR;
+      case SecurityEventType.RESOURCE_LIMIT_EXCEEDED:
+      case SecurityEventType.EXPORT_TIMEOUT:
+        return ErrorSeverity.WARNING;
+      case SecurityEventType.INVALID_INPUT:
+      default:
+        return ErrorSeverity.INFO;
+    }
+  }
+
+  /**
+   * Get recent security events
+   */
+  getRecentEvents(count = 10): SecurityEvent[] {
+    return this.events.slice(0, count);
+  }
+
+  /**
+   * Get events by type
+   */
+  getEventsByType(type: SecurityEventType): SecurityEvent[] {
+    return this.events.filter((e) => e.type === type);
+  }
+
+  /**
+   * Add listener for security events
+   */
+  addListener(listener: (event: SecurityEvent) => void): void {
+    this.listeners.push(listener);
+  }
+
+  /**
+   * Remove listener
+   */
+  removeListener(listener: (event: SecurityEvent) => void): void {
+    const index = this.listeners.indexOf(listener);
+    if (index !== -1) {
+      this.listeners.splice(index, 1);
+    }
+  }
+
+  /**
+   * Clear security log
+   */
+  clear(): void {
+    this.events = [];
+  }
+
+  /**
+   * Export security events for analysis
+   */
+  export(): string {
+    return JSON.stringify(this.events, null, 2);
+  }
+}
+
+/**
+ * Global security logger instance
+ */
+export const securityLogger = new SecurityLogger();
+
+/**
  * Wrap async function with error handling
  */
 export function withErrorHandling<T extends (...args: any[]) => Promise<any>>(

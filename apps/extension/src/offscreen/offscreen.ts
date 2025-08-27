@@ -16,7 +16,43 @@ import {
   generateExportId,
 } from "../types/database";
 import { ProgressReporter } from "../types/streaming";
-import { createExtendedError, DbErrorCode, errorLogger } from "../types/errors";
+import {
+  createExtendedError,
+  DbErrorCode,
+  errorLogger,
+  securityLogger,
+  SecurityEventType,
+} from "../types/errors";
+
+// Database row type definitions for type safety
+interface DocumentRow {
+  id: number;
+  url: string;
+  title: string;
+  site: string;
+  saved_at: string;
+  word_count: number;
+  hash: string;
+  raw_text: string;
+}
+
+interface DocumentWithSummaryCount extends DocumentRow {
+  summary_count: number;
+  last_accessed?: string;
+}
+
+interface SearchResultRow extends Omit<DocumentRow, "hash" | "raw_text"> {
+  snippet: string;
+  score: number;
+}
+
+interface CountRow {
+  count: number;
+}
+
+interface TotalRow {
+  total: number;
+}
 
 // Message types for communication with service worker and UI
 export enum MessageType {
@@ -475,6 +511,15 @@ class OffscreenDocument {
     });
   }
 
+  // Whitelist of allowed sort columns to prevent SQL injection
+  private readonly ALLOWED_SORT_COLUMNS: Record<string, string> = {
+    relevance: "rank",
+    date: "d.saved_at",
+    title: "d.title",
+  };
+
+  private readonly ALLOWED_SORT_ORDERS = ["asc", "desc"] as const;
+
   private async handleDbSearch(message: RequestMessage): Promise<ResponseMessage> {
     await this.ensureInitialized();
 
@@ -486,8 +531,17 @@ class OffscreenDocument {
       sortOrder = "desc",
     } = message.payload as DbSearchRequest["payload"];
 
-    // Build SQL query with FTS5
-    let sql = `
+    // Validate sort parameters to prevent SQL injection
+    if (sortBy && !this.ALLOWED_SORT_COLUMNS[sortBy]) {
+      securityLogger.logSqlInjectionAttempt(sortBy, { operation: "search", field: "sortBy" });
+    }
+    const safeColumn = this.ALLOWED_SORT_COLUMNS[sortBy] || this.ALLOWED_SORT_COLUMNS.relevance;
+    const safeOrder = this.ALLOWED_SORT_ORDERS.includes(sortOrder as "asc" | "desc")
+      ? sortOrder.toUpperCase()
+      : "DESC";
+
+    // Build SQL query with FTS5 - using safe column and order
+    const sql = `
       SELECT 
         d.id, d.url, d.title, d.site, d.saved_at, d.word_count,
         snippet(doc_fts, 0, '<mark>', '</mark>', '...', 30) as snippet,
@@ -495,33 +549,19 @@ class OffscreenDocument {
       FROM doc_fts
       JOIN documents d ON d.id = doc_fts.rowid
       WHERE doc_fts MATCH ?
+      ORDER BY ${safeColumn} ${safeOrder}
+      LIMIT ? OFFSET ?
     `;
-
-    // Add sorting
-    switch (sortBy) {
-      case "relevance":
-        sql += " ORDER BY rank";
-        break;
-      case "date":
-        sql += " ORDER BY d.saved_at";
-        break;
-      case "title":
-        sql += " ORDER BY d.title";
-        break;
-    }
-
-    sql += sortOrder === "asc" ? " ASC" : " DESC";
-    sql += " LIMIT ? OFFSET ?";
 
     const result = await this.connectionManager.query(sql, [query, limit, offset]);
 
-    // Get total count
+    // Get total count with proper typing
     const countResult = await this.connectionManager.query(
       "SELECT COUNT(*) as total FROM doc_fts WHERE doc_fts MATCH ?",
       [query],
     );
 
-    const total = (countResult.rows[0] as { total: number })?.total || 0;
+    const total = (countResult.rows[0] as TotalRow)?.total || 0;
 
     const response: ResponseMessage = {
       type: MessageType.DB_SEARCH_RESPONSE,
@@ -529,7 +569,7 @@ class OffscreenDocument {
       timestamp: Date.now(),
       success: true,
       data: {
-        results: result.rows as any[],
+        results: result.rows as SearchResultRow[],
         meta: {
           total,
           returned: result.rows.length,
@@ -549,10 +589,21 @@ class OffscreenDocument {
     const { confirm } = (message.payload as DbDeleteAllRequest["payload"]) || {};
 
     if (!confirm) {
+      securityLogger.log({
+        type: SecurityEventType.SUSPICIOUS_ACTIVITY,
+        message: "Delete all data attempted without confirmation",
+      });
       throw createExtendedError(DbErrorCode.INVALID_REQUEST, "Deletion must be confirmed");
     }
 
-    // Get counts before deletion
+    // Log the deletion operation
+    securityLogger.log({
+      type: SecurityEventType.SUSPICIOUS_ACTIVITY,
+      message: "Delete all data operation executed",
+      context: { confirmed: true },
+    });
+
+    // Get counts before deletion with proper typing
     const docCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM documents");
     const sumCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM summaries");
     const abRunCount = await this.connectionManager.query("SELECT COUNT(*) as count FROM ab_runs");
@@ -570,10 +621,10 @@ class OffscreenDocument {
     });
 
     const counts = {
-      documents: (docCount.rows[0] as { count: number }).count,
-      summaries: (sumCount.rows[0] as { count: number }).count,
-      abRuns: (abRunCount.rows[0] as { count: number }).count,
-      abScores: (abScoreCount.rows[0] as { count: number }).count,
+      documents: (docCount.rows[0] as CountRow).count,
+      summaries: (sumCount.rows[0] as CountRow).count,
+      abRuns: (abRunCount.rows[0] as CountRow).count,
+      abScores: (abScoreCount.rows[0] as CountRow).count,
     };
 
     const response: ResponseMessage = {
@@ -654,7 +705,7 @@ class OffscreenDocument {
     }
 
     const countResult = await this.connectionManager.query(countSql, countParams);
-    const total = (countResult.rows[0] as { total: number })?.total || 0;
+    const total = (countResult.rows[0] as TotalRow)?.total || 0;
 
     const response: ResponseMessage = {
       type: MessageType.DB_GET_HISTORY_RESPONSE,
@@ -662,11 +713,14 @@ class OffscreenDocument {
       timestamp: Date.now(),
       success: true,
       data: {
-        documents: result.rows.map((row: any) => ({
-          ...row,
-          hasSummary: row.summary_count > 0,
-          summaryCount: row.summary_count,
-        })),
+        documents: result.rows.map((row) => {
+          const typedRow = row as DocumentWithSummaryCount;
+          return {
+            ...typedRow,
+            hasSummary: typedRow.summary_count > 0,
+            summaryCount: typedRow.summary_count,
+          };
+        }),
         meta: {
           total,
           returned: result.rows.length,
@@ -679,15 +733,63 @@ class OffscreenDocument {
     return response;
   }
 
-  private activeExports = new Map<string, AbortController>();
+  // Export management with resource limits and cleanup
+  private readonly MAX_CONCURRENT_EXPORTS = 3;
+  private readonly EXPORT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+  private activeExports = new Map<
+    string,
+    {
+      controller: AbortController;
+      startTime: number;
+      timeoutId: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  private cleanupStaleExports(): void {
+    const now = Date.now();
+    for (const [id, exportInfo] of this.activeExports) {
+      if (now - exportInfo.startTime > this.EXPORT_TIMEOUT_MS) {
+        securityLogger.logExportTimeout(id, now - exportInfo.startTime);
+        console.warn(`[Offscreen] Cleaning up stale export: ${id}`);
+        this.cancelExport(id, "Timeout");
+      }
+    }
+  }
 
   private async handleDbExport(message: RequestMessage): Promise<ResponseMessage> {
     await this.ensureInitialized();
 
+    // Check concurrent export limit
+    this.cleanupStaleExports();
+    if (this.activeExports.size >= this.MAX_CONCURRENT_EXPORTS) {
+      securityLogger.logResourceLimitExceeded(
+        "concurrent_exports",
+        this.MAX_CONCURRENT_EXPORTS,
+        this.activeExports.size + 1,
+      );
+      throw createExtendedError(
+        DbErrorCode.QUOTA_EXCEEDED,
+        `Maximum concurrent exports (${this.MAX_CONCURRENT_EXPORTS}) reached. Please wait for existing exports to complete.`,
+      );
+    }
+
     const request = message.payload as DbExportDocumentsRequest["payload"];
     const exportId = request.exportId || generateExportId("export");
     const abortController = new AbortController();
-    this.activeExports.set(exportId, abortController);
+
+    // Set up automatic timeout with security logging
+    const timeoutId = setTimeout(() => {
+      securityLogger.logExportTimeout(exportId, this.EXPORT_TIMEOUT_MS);
+      console.warn(`[Offscreen] Export ${exportId} timed out`);
+      this.cancelExport(exportId, "Timeout");
+    }, this.EXPORT_TIMEOUT_MS);
+
+    // Track export with cleanup info
+    this.activeExports.set(exportId, {
+      controller: abortController,
+      startTime: Date.now(),
+      timeoutId,
+    });
 
     // Send export started response
     const startResponse: ResponseMessage = {
@@ -703,11 +805,15 @@ class OffscreenDocument {
       },
     };
 
-    // Start export in background
-    this.performExport(exportId, request, abortController.signal).catch((error) => {
-      errorLogger.log(error);
-      this.sendExportError(exportId, error);
-    });
+    // Start export in background with cleanup on completion
+    this.performExport(exportId, request, abortController.signal)
+      .finally(() => {
+        this.cleanupExport(exportId);
+      })
+      .catch((error) => {
+        errorLogger.log(error);
+        this.sendExportError(exportId, error);
+      });
 
     return startResponse;
   }
@@ -743,7 +849,7 @@ class OffscreenDocument {
       sql.replace("SELECT *", "SELECT COUNT(*) as total"),
       params,
     );
-    const totalDocuments = (countResult.rows[0] as { total: number })?.total || 0;
+    const totalDocuments = (countResult.rows[0] as TotalRow)?.total || 0;
 
     // Create progress reporter
     const progressReporter = new ProgressReporter(
@@ -840,17 +946,29 @@ class OffscreenDocument {
     });
 
     progressReporter.complete();
-    this.activeExports.delete(exportId);
+    this.cleanupExport(exportId);
+  }
+
+  private cleanupExport(exportId: string): void {
+    const exportInfo = this.activeExports.get(exportId);
+    if (exportInfo) {
+      clearTimeout(exportInfo.timeoutId);
+      this.activeExports.delete(exportId);
+      console.log(`[Offscreen] Cleaned up export: ${exportId}`);
+    }
+  }
+
+  private cancelExport(exportId: string, reason?: string): void {
+    const exportInfo = this.activeExports.get(exportId);
+    if (exportInfo) {
+      exportInfo.controller.abort(reason);
+      this.cleanupExport(exportId);
+    }
   }
 
   private async handleDbCancelExport(message: RequestMessage): Promise<ResponseMessage> {
-    const { exportId } = message.payload as DbCancelExportRequest["payload"];
-
-    const controller = this.activeExports.get(exportId);
-    if (controller) {
-      controller.abort();
-      this.activeExports.delete(exportId);
-    }
+    const { exportId, reason } = message.payload as DbCancelExportRequest["payload"];
+    this.cancelExport(exportId, reason);
 
     const response: ResponseMessage = {
       type: MessageType.DB_EXPORT_CANCELLED,
