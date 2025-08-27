@@ -3,6 +3,10 @@ import tseslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
 export default [
+  // Ignore vendored SQLite files
+  {
+    ignores: ["packages/db/sqlite3/**/*"],
+  },
   // Base config for all files
   {
     files: ["**/*.js", "**/*.jsx"],

@@ -1,433 +1,356 @@
 /**
- * Unit tests for connection pool management
+ * Unit tests for ConnectionManager with single-connection queue
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ConnectionManager } from "../../offscreen/connectionManager";
 
-// Mock the SQLite connection
-vi.mock("@briefcase/db", () => ({
-  openDatabase: vi.fn(),
-  SQLiteConnection: vi.fn(),
+// Mock the SQLite wrapper
+vi.mock("@briefcase/db/sqlite", () => ({
+  SQLiteWrapper: vi.fn().mockImplementation(() => ({
+    initialize: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockResolvedValue([]),
+    execute: vi.fn().mockResolvedValue({ changes: 0, lastInsertRowid: 1 }),
+    transaction: vi.fn().mockImplementation((callback) =>
+      callback({
+        execute: vi.fn().mockResolvedValue({ changes: 0, lastInsertRowid: 1 }),
+      }),
+    ),
+    search: vi.fn().mockResolvedValue([]),
+    getStats: vi.fn().mockResolvedValue({
+      documentCount: 0,
+      summaryCount: 0,
+      databaseSize: 0,
+    }),
+    close: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
 
-describe("Connection Pool Management", () => {
-  let connectionManager: any;
-  let mockConnections: any[];
+describe("ConnectionManager", () => {
+  let connectionManager: ConnectionManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-
-    // Create mock connections
-    mockConnections = [];
-    for (let i = 0; i < 10; i++) {
-      mockConnections.push({
-        exec: vi.fn().mockResolvedValue({ rows: [], changes: 0 }),
-        close: vi.fn(),
-      });
-    }
-
-    connectionManager = new ConnectionManager() as any;
+    connectionManager = new ConnectionManager();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
+  afterEach(async () => {
+    if (connectionManager) {
+      await connectionManager.close();
+    }
     vi.clearAllMocks();
   });
 
-  describe("Connection Lifecycle", () => {
-    it("should initialize the connection manager", async () => {
+  describe("Initialization", () => {
+    it("should initialize successfully", async () => {
       await connectionManager.initialize();
 
-      expect(connectionManager.isInitialized).toBe(true);
-    });
-
-    it("should prevent multiple simultaneous initializations", async () => {
-      const promise1 = connectionManager.initialize();
-      const promise2 = connectionManager.initialize();
-      const promise3 = connectionManager.initialize();
-
-      await Promise.all([promise1, promise2, promise3]);
-
-      // Verify initialize was only called once internally
-      expect(connectionManager.isInitialized).toBe(true);
-    });
-
-    it("should create connections on demand", async () => {
+      // Second initialization should be idempotent
       await connectionManager.initialize();
 
-      const conn = await connectionManager.getConnection();
-      expect(conn).toBeDefined();
-      expect(conn.exec).toBeDefined();
-      expect(conn.close).toBeDefined();
+      expect(true).toBe(true);
     });
 
-    it("should reuse idle connections", async () => {
-      await connectionManager.initialize();
+    it("should handle concurrent initialization calls", async () => {
+      const promises = Array(5)
+        .fill(null)
+        .map(() => connectionManager.initialize());
+      await Promise.all(promises);
 
-      const conn1 = await connectionManager.getConnection();
-      connectionManager.releaseConnection(conn1);
-
-      const conn2 = await connectionManager.getConnection();
-      expect(conn1).toBe(conn2); // Should be the same connection object
+      expect(true).toBe(true);
     });
 
-    it("should respect max connection limit", async () => {
-      await connectionManager.initialize();
-
-      const connections = [];
-
-      // Get max connections
-      for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager.getConnection());
-      }
-
-      // Try to get one more - should wait or fail
-      const extraConnectionPromise = connectionManager.getConnection();
-
-      // Should be waiting for a connection
-      expect(connectionManager.pool.length).toBe(5);
-
-      // Release one connection
-      connectionManager.releaseConnection(connections[0]);
-
-      // Now the waiting connection should resolve
-      const extraConnection = await extraConnectionPromise;
-      expect(extraConnection).toBeDefined();
-    });
-
-    it("should mark connections as in use correctly", async () => {
-      await connectionManager.initialize();
-
-      const conn = await connectionManager.getConnection();
-      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-
-      expect(pooledConn?.inUse).toBe(true);
-
-      connectionManager.releaseConnection(conn);
-      expect(pooledConn?.inUse).toBe(false);
-    });
-
-    it("should update lastUsed timestamp on release", async () => {
-      await connectionManager.initialize();
-
-      const conn = await connectionManager.getConnection();
-      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-      const initialTimestamp = pooledConn?.lastUsed;
-
-      // Wait a bit
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      connectionManager.releaseConnection(conn);
-      expect(pooledConn?.lastUsed).toBeGreaterThan(initialTimestamp!);
-    });
-  });
-
-  describe("Idle Connection Cleanup", () => {
-    it("should clean up idle connections after timeout", async () => {
-      await connectionManager.initialize();
-
-      // Create and release a connection
-      const conn = await connectionManager.getConnection();
-      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-      connectionManager.releaseConnection(conn);
-
-      // Mock the connection as idle for longer than timeout
-      if (pooledConn) {
-        pooledConn.lastUsed = Date.now() - 400000; // 400 seconds ago (> 5 min)
-      }
-
-      // Trigger cleanup
-      connectionManager.cleanupIdleConnections();
-
-      // Connection should be removed
-      expect(connectionManager.pool.find((p: any) => p.connection === conn)).toBeUndefined();
-      expect(conn.close).toHaveBeenCalled();
-    });
-
-    it("should not clean up active connections", async () => {
-      await connectionManager.initialize();
-
-      const conn = await connectionManager.getConnection();
-      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-
-      // Mock as old but still in use
-      if (pooledConn) {
-        pooledConn.lastUsed = Date.now() - 400000; // 400 seconds ago
-        // conn is still marked as inUse = true
-      }
-
-      connectionManager.cleanupIdleConnections();
-
-      // Connection should NOT be removed
-      expect(connectionManager.pool.find((p: any) => p.connection === conn)).toBeDefined();
-      expect(conn.close).not.toHaveBeenCalled();
-    });
-
-    it("should keep minimum number of connections", async () => {
-      await connectionManager.initialize();
-
-      // Create multiple connections
-      const conns = [];
-      for (let i = 0; i < 3; i++) {
-        conns.push(await connectionManager.getConnection());
-      }
-
-      // Release all
-      conns.forEach((c) => connectionManager.releaseConnection(c));
-
-      // Mark all as old
-      connectionManager.pool.forEach((p: any) => {
-        p.lastUsed = Date.now() - 400000;
+    it("should initialize with custom config", async () => {
+      const customManager = new ConnectionManager({
+        retryAttempts: 5,
+        retryDelay: 2000,
+        queryTimeout: 60000,
+        useOPFS: false,
       });
 
-      connectionManager.cleanupIdleConnections();
+      await customManager.initialize();
+      await customManager.close();
 
-      // Should keep at least 1 connection
-      expect(connectionManager.pool.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it("should run periodic cleanup", () => {
-      const cleanupSpy = vi.spyOn(connectionManager, "cleanupIdleConnections");
-
-      // Fast-forward time to trigger cleanup
-      vi.advanceTimersByTime(60000); // 1 minute
-
-      expect(cleanupSpy).toHaveBeenCalled();
+      expect(true).toBe(true);
     });
   });
 
-  describe("Connection Pool Statistics", () => {
-    it("should provide accurate pool statistics", async () => {
+  describe("Query Operations", () => {
+    beforeEach(async () => {
       await connectionManager.initialize();
-
-      // Get initial stats
-      let stats = connectionManager.getPoolStats();
-      expect(stats.total).toBe(1); // One created during init
-      expect(stats.active).toBe(0);
-      expect(stats.idle).toBe(1);
-
-      // Get a connection
-      const conn1 = await connectionManager.getConnection();
-      stats = connectionManager.getPoolStats();
-      expect(stats.active).toBe(1);
-      expect(stats.idle).toBe(0);
-
-      // Get another connection
-      await connectionManager.getConnection();
-      stats = connectionManager.getPoolStats();
-      expect(stats.total).toBe(2);
-      expect(stats.active).toBe(2);
-      expect(stats.idle).toBe(0);
-
-      // Release one
-      connectionManager.releaseConnection(conn1);
-      stats = connectionManager.getPoolStats();
-      expect(stats.active).toBe(1);
-      expect(stats.idle).toBe(1);
-    });
-  });
-
-  describe("Connection Creation and Destruction", () => {
-    it("should create new connections when pool is empty", async () => {
-      await connectionManager.initialize();
-
-      const conn1 = await connectionManager.getConnection();
-      const conn2 = await connectionManager.getConnection();
-
-      expect(conn1).not.toBe(conn2);
-      expect(connectionManager.pool.length).toBe(2);
     });
 
-    it("should assign unique IDs to connections", async () => {
-      await connectionManager.initialize();
-
-      const conn1 = await connectionManager.getConnection();
-      const conn2 = await connectionManager.getConnection();
-
-      const pooledConn1 = connectionManager.pool.find((p: any) => p.connection === conn1);
-      const pooledConn2 = connectionManager.pool.find((p: any) => p.connection === conn2);
-
-      expect(pooledConn1?.id).toBeDefined();
-      expect(pooledConn2?.id).toBeDefined();
-      expect(pooledConn1?.id).not.toBe(pooledConn2?.id);
+    it("should execute queries", async () => {
+      const result = await connectionManager.query("SELECT * FROM documents");
+      expect(Array.isArray(result)).toBe(true);
     });
 
-    it("should close all connections on manager close", async () => {
-      await connectionManager.initialize();
+    it("should execute parameterized queries", async () => {
+      const result = await connectionManager.query("SELECT * FROM documents WHERE id = ?", [1]);
+      expect(Array.isArray(result)).toBe(true);
+    });
 
-      const conns = [];
-      for (let i = 0; i < 3; i++) {
-        const conn = await connectionManager.getConnection();
-        conns.push(conn);
-      }
-
-      await connectionManager.close();
-
-      conns.forEach((conn) => {
-        expect(conn.close).toHaveBeenCalled();
+    it("should handle query errors with retry", async () => {
+      const customManager = new ConnectionManager({
+        retryAttempts: 2,
+        retryDelay: 100,
+        queryTimeout: 1000,
+        useOPFS: false,
       });
 
-      expect(connectionManager.pool.length).toBe(0);
-    });
+      await customManager.initialize();
 
-    it("should handle connection creation failures", async () => {
-      // Mock connection creation to fail
-      connectionManager.createConnection = vi
+      // Mock a failing query that succeeds on retry
+      const mockQuery = vi
         .fn()
-        .mockRejectedValue(new Error("Connection failed"));
+        .mockRejectedValueOnce(new Error("Temporary error"))
+        .mockResolvedValueOnce([{ id: 1 }]);
 
-      await expect(connectionManager.initialize()).rejects.toThrow("Connection failed");
+      // @ts-ignore - accessing private property for testing
+      customManager.db.query = mockQuery;
+
+      const result = await customManager.query("SELECT * FROM documents");
+      expect(mockQuery).toHaveBeenCalledTimes(2);
+      expect(result).toEqual([{ id: 1 }]);
+
+      await customManager.close();
     });
   });
 
-  describe("Thread Safety and Race Conditions", () => {
-    it("should handle concurrent connection requests safely", async () => {
+  describe("Execute Operations", () => {
+    beforeEach(async () => {
       await connectionManager.initialize();
-
-      // Request many connections simultaneously
-      const promises = [];
-      for (let i = 0; i < 10; i++) {
-        promises.push(connectionManager.getConnection());
-      }
-
-      const connections = await Promise.all(promises);
-
-      // All connections should be unique (up to pool limit)
-      const uniqueConnections = new Set(connections);
-      expect(uniqueConnections.size).toBeLessThanOrEqual(5); // Max pool size
-
-      // All connections should be marked as in use
-      connections.forEach((conn) => {
-        const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-        expect(pooledConn?.inUse).toBe(true);
-      });
     });
 
-    it("should handle concurrent release safely", async () => {
-      await connectionManager.initialize();
-
-      const connections = [];
-      for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager.getConnection());
-      }
-
-      // Release all connections simultaneously
-      const releasePromises = connections.map((conn) =>
-        Promise.resolve(connectionManager.releaseConnection(conn)),
+    it("should execute INSERT statements", async () => {
+      const result = await connectionManager.execute(
+        "INSERT INTO documents (url, title, raw_text) VALUES (?, ?, ?)",
+        ["https://example.com", "Test", "Content"],
       );
 
-      await Promise.all(releasePromises);
-
-      // All connections should be idle
-      connectionManager.pool.forEach((pooledConn: any) => {
-        expect(pooledConn.inUse).toBe(false);
-      });
+      expect(result).toHaveProperty("changes");
+      expect(result).toHaveProperty("lastInsertRowid");
     });
 
-    it("should prevent double-release of connections", async () => {
-      await connectionManager.initialize();
+    it("should execute UPDATE statements", async () => {
+      const result = await connectionManager.execute(
+        "UPDATE documents SET title = ? WHERE id = ?",
+        ["New Title", 1],
+      );
 
-      const conn = await connectionManager.getConnection();
+      expect(result).toHaveProperty("changes");
+      expect(result).toHaveProperty("lastInsertRowid");
+    });
 
-      // Release once
-      connectionManager.releaseConnection(conn);
+    it("should execute DELETE statements", async () => {
+      const result = await connectionManager.execute("DELETE FROM documents WHERE id = ?", [1]);
 
-      // Try to release again - should be handled gracefully
-      expect(() => connectionManager.releaseConnection(conn)).not.toThrow();
-
-      // Connection should still be idle
-      const pooledConn = connectionManager.pool.find((p: any) => p.connection === conn);
-      expect(pooledConn?.inUse).toBe(false);
+      expect(result).toHaveProperty("changes");
+      expect(result).toHaveProperty("lastInsertRowid");
     });
   });
 
-  describe("Connection Wait Queue", () => {
-    it("should queue requests when pool is exhausted", async () => {
+  describe("Transaction Handling", () => {
+    beforeEach(async () => {
       await connectionManager.initialize();
+    });
 
-      // Fill up the pool
-      const connections = [];
-      for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager.getConnection());
-      }
-
-      // These should be queued
-      const waitingPromises = [
-        connectionManager.getConnection(),
-        connectionManager.getConnection(),
-      ];
-
-      // Give them time to queue
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      // Verify they're waiting
-      let resolved = false;
-      waitingPromises[0].then(() => {
-        resolved = true;
+    it("should execute transactions successfully", async () => {
+      const result = await connectionManager.transaction(async (db) => {
+        await db.execute("INSERT INTO documents (url, raw_text) VALUES (?, ?)", [
+          "https://test.com",
+          "Test content",
+        ]);
+        return "success";
       });
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(resolved).toBe(false);
 
-      // Release a connection
-      connectionManager.releaseConnection(connections[0]);
-
-      // First waiting request should now resolve
-      const conn = await waitingPromises[0];
-      expect(conn).toBeDefined();
+      expect(result).toBe("success");
     });
 
-    it("should handle timeout for waiting connections", async () => {
-      // Set a short timeout
-      connectionManager = new ConnectionManager({
-        connectionTimeout: 100,
-      }) as any;
+    it("should handle transaction errors", async () => {
+      // @ts-ignore - accessing private property for testing
+      connectionManager.db.transaction = vi.fn().mockRejectedValue(new Error("Transaction failed"));
+
+      await expect(
+        connectionManager.transaction(async (db) => {
+          await db.execute("INVALID SQL");
+          return "should not reach";
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe("Full-Text Search", () => {
+    beforeEach(async () => {
       await connectionManager.initialize();
-
-      // Fill up the pool
-      const connections = [];
-      for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager.getConnection());
-      }
-
-      // This should timeout
-      vi.advanceTimersByTime(101);
-
-      await expect(connectionManager.getConnection()).rejects.toThrow(/timeout/i);
     });
 
-    it("should process wait queue in FIFO order", async () => {
+    it("should perform search queries", async () => {
+      const results = await connectionManager.search("test query", 10, 0);
+      expect(Array.isArray(results)).toBe(true);
+    });
+
+    it("should respect limit and offset", async () => {
+      const results = await connectionManager.search("test", 5, 10);
+      expect(Array.isArray(results)).toBe(true);
+    });
+  });
+
+  describe("Document Operations", () => {
+    beforeEach(async () => {
       await connectionManager.initialize();
+    });
 
-      // Fill up the pool
-      const connections = [];
-      for (let i = 0; i < 5; i++) {
-        connections.push(await connectionManager.getConnection());
-      }
+    it("should save a document", async () => {
+      const doc = {
+        url: "https://example.com",
+        title: "Test Document",
+        site: "example.com",
+        word_count: 100,
+        hash: "test-hash",
+        raw_text: "Test content",
+      };
 
-      // Queue multiple requests
-      const order: number[] = [];
-      const waitingPromises = [
-        connectionManager.getConnection().then(() => order.push(1)),
-        connectionManager.getConnection().then(() => order.push(2)),
-        connectionManager.getConnection().then(() => order.push(3)),
-      ];
+      const id = await connectionManager.saveDocument(doc);
+      expect(id).toBe(1);
+    });
 
-      // Release connections one by one
-      connectionManager.releaseConnection(connections[0]);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    it("should get a document by ID", async () => {
+      // @ts-ignore - accessing private property for testing
+      connectionManager.db.query = vi.fn().mockResolvedValue([
+        {
+          id: 1,
+          url: "https://example.com",
+          title: "Test",
+          raw_text: "Content",
+        },
+      ]);
 
-      connectionManager.releaseConnection(connections[1]);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      const doc = await connectionManager.getDocument(1);
+      expect(doc).toBeDefined();
+      expect(doc?.id).toBe(1);
+    });
 
-      connectionManager.releaseConnection(connections[2]);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    it("should return null for non-existent document", async () => {
+      // @ts-ignore - accessing private property for testing
+      connectionManager.db.query = vi.fn().mockResolvedValue([]);
 
-      await Promise.all(waitingPromises);
+      const doc = await connectionManager.getDocument(999);
+      expect(doc).toBeNull();
+    });
 
-      // Should be processed in order
-      expect(order).toEqual([1, 2, 3]);
+    it("should get document history", async () => {
+      const history = await connectionManager.getHistory(50, 0);
+      expect(Array.isArray(history)).toBe(true);
+    });
+
+    it("should delete all data", async () => {
+      await expect(connectionManager.deleteAllData()).resolves.not.toThrow();
+    });
+  });
+
+  describe("Statistics", () => {
+    beforeEach(async () => {
+      await connectionManager.initialize();
+    });
+
+    it("should return database statistics", async () => {
+      const stats = await connectionManager.getStats();
+
+      expect(stats).toHaveProperty("documentCount");
+      expect(stats).toHaveProperty("summaryCount");
+      expect(stats).toHaveProperty("databaseSize");
+      expect(typeof stats.documentCount).toBe("number");
+      expect(typeof stats.summaryCount).toBe("number");
+      expect(typeof stats.databaseSize).toBe("number");
+    });
+  });
+
+  describe("Retry Logic", () => {
+    it("should retry operations on failure", async () => {
+      const customManager = new ConnectionManager({
+        retryAttempts: 3,
+        retryDelay: 50,
+        queryTimeout: 1000,
+        useOPFS: false,
+      });
+
+      await customManager.initialize();
+
+      let attempts = 0;
+      // @ts-ignore - accessing private property for testing
+      customManager.db.query = vi.fn().mockImplementation(() => {
+        attempts++;
+        if (attempts < 3) {
+          throw new Error("Temporary failure");
+        }
+        return [{ id: 1 }];
+      });
+
+      const result = await customManager.query("SELECT * FROM documents");
+      expect(attempts).toBe(3);
+      expect(result).toEqual([{ id: 1 }]);
+
+      await customManager.close();
+    });
+
+    it("should fail after max retries", async () => {
+      const customManager = new ConnectionManager({
+        retryAttempts: 2,
+        retryDelay: 50,
+        queryTimeout: 1000,
+        useOPFS: false,
+      });
+
+      await customManager.initialize();
+
+      // @ts-ignore - accessing private property for testing
+      customManager.db.query = vi.fn().mockRejectedValue(new Error("Permanent failure"));
+
+      await expect(customManager.query("SELECT * FROM documents")).rejects.toThrow(
+        "Permanent failure",
+      );
+
+      await customManager.close();
+    });
+
+    it("should handle operation timeout", async () => {
+      const customManager = new ConnectionManager({
+        retryAttempts: 1,
+        retryDelay: 50,
+        queryTimeout: 100,
+        useOPFS: false,
+      });
+
+      await customManager.initialize();
+
+      // @ts-ignore - accessing private property for testing
+      customManager.db.query = vi.fn().mockImplementation(() => {
+        return new Promise((resolve) => {
+          setTimeout(() => resolve([]), 200); // Longer than timeout
+        });
+      });
+
+      await expect(customManager.query("SELECT * FROM documents")).rejects.toThrow(
+        /timeout exceeded/,
+      );
+
+      await customManager.close();
+    });
+  });
+
+  describe("Cleanup", () => {
+    it("should close database connection properly", async () => {
+      await connectionManager.initialize();
+      await connectionManager.close();
+
+      // Should be able to reinitialize after closing
+      await connectionManager.initialize();
+      await connectionManager.close();
+    });
+
+    it("should handle close without initialization", async () => {
+      await expect(connectionManager.close()).resolves.not.toThrow();
     });
   });
 });

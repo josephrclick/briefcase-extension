@@ -1,59 +1,34 @@
 /**
  * Connection manager for SQLite WASM database.
- * Handles connection pooling, initialization, and query execution.
+ * Uses a single connection with queued executor as per issue #50.
  */
 
-// SQLite WASM types (will be provided by @briefcase/db package)
-interface SQLiteConnection {
-  exec(sql: string, params?: unknown[]): SQLiteResult;
-  close(): void;
-}
-
-interface SQLiteResult {
-  rows: unknown[];
-  changes: number;
-  lastInsertRowid?: number;
-}
+import { SQLiteWrapper } from "@briefcase/db/sqlite";
+import type { Database, Document, SearchResult } from "@briefcase/db/types";
 
 interface DatabaseConfig {
-  maxConnections: number;
-  connectionTimeout: number;
-  idleTimeout: number;
   retryAttempts: number;
   retryDelay: number;
   queryTimeout: number;
-}
-
-interface PooledConnection {
-  connection: SQLiteConnection;
-  inUse: boolean;
-  lastUsed: number;
-  id: string;
+  useOPFS: boolean;
 }
 
 export class ConnectionManager {
   private config: DatabaseConfig = {
-    maxConnections: 5,
-    connectionTimeout: 10000, // 10 seconds
-    idleTimeout: 300000, // 5 minutes
     retryAttempts: 3,
     retryDelay: 1000, // 1 second
     queryTimeout: 30000, // 30 seconds
+    useOPFS: true, // Use OPFS for persistent storage
   };
 
-  private pool: PooledConnection[] = [];
+  private db: Database | null = null;
   private isInitialized = false;
   private initializationPromise: Promise<void> | null = null;
-  // TODO: Use dbPath when implementing actual SQLite connection
-  // private dbPath = "/briefcase.db";
 
   constructor(config?: Partial<DatabaseConfig>) {
     if (config) {
       this.config = { ...this.config, ...config };
     }
-
-    // Start idle connection cleanup
-    this.startIdleCleanup();
   }
 
   /**
@@ -84,403 +59,225 @@ export class ConnectionManager {
   private async doInitialize(): Promise<void> {
     console.log("[ConnectionManager] Initializing database...");
 
-    // TODO: Import and initialize SQLite WASM from @briefcase/db
-    // For now, we'll create a mock implementation
-    // In the real implementation, this would:
-    // 1. Load SQLite WASM
-    // 2. Create database file in OPFS
-    // 3. Run migrations to create tables
+    // Create SQLite wrapper with OPFS support
+    this.db = new SQLiteWrapper(this.config.useOPFS);
 
-    await this.createTables();
+    // Initialize the database (loads WASM, opens OPFS DB, runs schema)
+    await this.db.initialize();
 
-    // Pre-create minimum connections
-    await this.createConnection();
+    console.log("[ConnectionManager] Database initialized with OPFS support");
   }
 
   /**
-   * Create database tables if they don't exist
+   * Get the database instance
    */
-  private async createTables(): Promise<void> {
-    const schemaSql = `
-      -- Documents table
-      CREATE TABLE IF NOT EXISTS documents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        url TEXT NOT NULL,
-        title TEXT NOT NULL,
-        site TEXT,
-        saved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        word_count INTEGER,
-        hash TEXT UNIQUE,
-        raw_text TEXT,
-        UNIQUE(url, hash)
-      );
-      
-      -- Summaries table
-      CREATE TABLE IF NOT EXISTS summaries (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        document_id INTEGER NOT NULL,
-        model TEXT NOT NULL,
-        params_json TEXT,
-        saved_path TEXT,
-        saved_format TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
-      );
-      
-      -- A/B test runs table
-      CREATE TABLE IF NOT EXISTS ab_runs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        document_id INTEGER NOT NULL,
-        model_a TEXT NOT NULL,
-        model_b TEXT NOT NULL,
-        prompt_template TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
-      );
-      
-      -- A/B test scores table
-      CREATE TABLE IF NOT EXISTS ab_scores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        run_id INTEGER NOT NULL,
-        coverage INTEGER CHECK(coverage IN (0, 1)),
-        readability INTEGER CHECK(readability IN (0, 1)),
-        faithfulness INTEGER CHECK(faithfulness IN (0, 1)),
-        note TEXT,
-        rater TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (run_id) REFERENCES ab_runs(id) ON DELETE CASCADE
-      );
-      
-      -- Full-text search virtual table
-      CREATE VIRTUAL TABLE IF NOT EXISTS doc_fts USING fts5(
-        content,
-        title,
-        url,
-        content='documents',
-        content_rowid='id'
-      );
-      
-      -- Triggers to keep FTS index in sync
-      CREATE TRIGGER IF NOT EXISTS documents_ai 
-      AFTER INSERT ON documents 
-      BEGIN
-        INSERT INTO doc_fts (rowid, content, title, url)
-        VALUES (new.id, new.raw_text, new.title, new.url);
-      END;
-      
-      CREATE TRIGGER IF NOT EXISTS documents_ad 
-      AFTER DELETE ON documents 
-      BEGIN
-        DELETE FROM doc_fts WHERE rowid = old.id;
-      END;
-      
-      CREATE TRIGGER IF NOT EXISTS documents_au 
-      AFTER UPDATE ON documents 
-      BEGIN
-        UPDATE doc_fts 
-        SET content = new.raw_text, title = new.title, url = new.url
-        WHERE rowid = new.id;
-      END;
-      
-      -- Indexes for performance
-      CREATE INDEX IF NOT EXISTS idx_documents_url ON documents(url);
-      CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(hash);
-      CREATE INDEX IF NOT EXISTS idx_summaries_document_id ON summaries(document_id);
-      CREATE INDEX IF NOT EXISTS idx_ab_runs_document_id ON ab_runs(document_id);
-      CREATE INDEX IF NOT EXISTS idx_ab_scores_run_id ON ab_scores(run_id);
-    `;
-
-    // Execute schema creation
-    const conn = await this.getConnection();
-    try {
-      await this.executeWithConnection(conn, schemaSql);
-    } finally {
-      this.releaseConnection(conn);
+  private getDatabase(): Database {
+    if (!this.db) {
+      throw new Error("Database not initialized");
     }
+    return this.db;
   }
 
   /**
-   * Get a connection from the pool
+   * Execute a query with retry logic
    */
-  private async getConnection(): Promise<PooledConnection> {
-    // Try to find an available connection
-    const available = this.pool.find((c) => !c.inUse);
-
-    if (available) {
-      available.inUse = true;
-      available.lastUsed = Date.now();
-      return available;
-    }
-
-    // Create new connection if pool not full
-    if (this.pool.length < this.config.maxConnections) {
-      return await this.createConnection();
-    }
-
-    // Wait for a connection to become available
-    return await this.waitForConnection();
-  }
-
-  /**
-   * Create a new database connection
-   */
-  private async createConnection(): Promise<PooledConnection> {
-    console.log(`[ConnectionManager] Creating new connection (pool size: ${this.pool.length})`);
-
-    // TODO: Replace with actual SQLite WASM implementation from @briefcase/db package
-    // This mock implementation is temporary and should be replaced before production
-    // Required: Import and initialize SQLite WASM, create actual database connection
-    const mockConnection: SQLiteConnection = {
-      exec: (sql: string, _params?: unknown[]) => {
-        // Mock implementation
-        console.log("[MockConnection] Executing:", sql.substring(0, 50) + "...");
-        return {
-          rows: [],
-          changes: 0,
-          lastInsertRowid: Date.now(),
-        };
-      },
-      close: () => {
-        console.log("[MockConnection] Closing connection");
-      },
-    };
-
-    const pooledConnection: PooledConnection = {
-      connection: mockConnection,
-      inUse: true,
-      lastUsed: Date.now(),
-      id: `conn-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-    };
-
-    this.pool.push(pooledConnection);
-    return pooledConnection;
-  }
-
-  /**
-   * Wait for a connection to become available
-   */
-  private async waitForConnection(): Promise<PooledConnection> {
-    const startTime = Date.now();
-
-    return new Promise((resolve, reject) => {
-      const checkInterval = setInterval(() => {
-        // Add pool health check
-        if (this.pool.length === 0) {
-          clearInterval(checkInterval);
-          reject(new Error("Connection pool is empty - no connections available"));
-          return;
-        }
-
-        const available = this.pool.find((c) => !c.inUse);
-
-        if (available) {
-          clearInterval(checkInterval);
-          available.inUse = true;
-          available.lastUsed = Date.now();
-          resolve(available);
-        } else if (Date.now() - startTime > this.config.connectionTimeout) {
-          clearInterval(checkInterval);
-          reject(new Error("Connection timeout - no connections available"));
-        }
-      }, 100);
-    });
-  }
-
-  /**
-   * Release a connection back to the pool
-   */
-  private releaseConnection(pooledConnection: PooledConnection): void {
-    const conn = this.pool.find((c) => c.id === pooledConnection.id);
-    if (conn) {
-      conn.inUse = false;
-      conn.lastUsed = Date.now();
-    }
-  }
-
-  /**
-   * Execute a query with a connection
-   */
-  private async executeWithConnection(
-    pooledConnection: PooledConnection,
-    sql: string,
-    params?: unknown[],
-  ): Promise<SQLiteResult> {
+  private async executeWithRetry<T>(
+    operation: () => Promise<T>,
+    operationName: string = "operation",
+  ): Promise<T> {
     let attempts = 0;
+    let lastError: Error | null = null;
 
     while (attempts < this.config.retryAttempts) {
-      // Set up query timeout (using number type for browser environment)
-      let timeoutId: number | undefined;
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        // In browser environment, setTimeout returns a number
-        timeoutId = window.setTimeout(() => {
-          reject(new Error(`Query timeout exceeded (${this.config.queryTimeout}ms)`));
-        }, this.config.queryTimeout);
-      });
+      attempts++;
 
       try {
-        // Race between query execution and timeout
-        const result = await Promise.race([
-          Promise.resolve(pooledConnection.connection.exec(sql, params)),
-          timeoutPromise,
-        ]);
+        // Set up operation timeout
+        let timeoutId: number | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject(new Error(`${operationName} timeout exceeded (${this.config.queryTimeout}ms)`));
+          }, this.config.queryTimeout);
+        });
 
-        // Clear timeout if query succeeded
+        // Race between operation and timeout
+        const result = await Promise.race([operation(), timeoutPromise]);
+
+        // Clear timeout if operation succeeded
         if (timeoutId !== undefined) {
           window.clearTimeout(timeoutId);
         }
 
         return result;
       } catch (error) {
+        lastError = error as Error;
+
         // Clear timeout on error
-        if (timeoutId !== undefined) {
-          window.clearTimeout(timeoutId);
+        if (error && (error as Error & { timeoutId?: number }).timeoutId !== undefined) {
+          window.clearTimeout((error as Error & { timeoutId: number }).timeoutId);
         }
 
-        attempts++;
-
         if (attempts >= this.config.retryAttempts) {
-          throw error;
+          throw lastError;
         }
 
         console.warn(
-          `[ConnectionManager] Query failed (attempt ${attempts}/${this.config.retryAttempts}):`,
+          `[ConnectionManager] ${operationName} failed (attempt ${attempts}/${this.config.retryAttempts}):`,
           error,
         );
 
-        // Wait before retry
-        await new Promise((resolve) => setTimeout(resolve, this.config.retryDelay));
+        // Wait before retry with exponential backoff
+        const delay = this.config.retryDelay * Math.pow(2, attempts - 1);
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
-    throw new Error("Failed to execute query after retries");
+    throw lastError || new Error(`Failed to execute ${operationName} after retries`);
   }
 
   /**
    * Execute a query and return results
    */
-  async query(sql: string, params?: unknown[]): Promise<SQLiteResult> {
+  async query<T = unknown>(sql: string, params?: unknown[]): Promise<T[]> {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
-    const conn = await this.getConnection();
-
-    try {
-      return await this.executeWithConnection(conn, sql, params);
-    } finally {
-      this.releaseConnection(conn);
-    }
+    const db = this.getDatabase();
+    return this.executeWithRetry(() => db.query<T>(sql, params), "query");
   }
 
   /**
    * Execute a statement (INSERT, UPDATE, DELETE)
    */
-  async execute(sql: string, params?: unknown[]): Promise<SQLiteResult> {
-    return this.query(sql, params);
+  async execute(
+    sql: string,
+    params?: unknown[],
+  ): Promise<{ changes: number; lastInsertRowid: number }> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const db = this.getDatabase();
+    return this.executeWithRetry(() => db.execute(sql, params), "execute");
   }
 
   /**
    * Execute multiple operations in a transaction
    */
-  async transaction<T>(
-    callback: (conn: {
-      execute: (sql: string, params?: unknown[]) => Promise<SQLiteResult>;
-    }) => Promise<T>,
-  ): Promise<T> {
+  async transaction<T>(callback: (db: Database) => Promise<T>): Promise<T> {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
-    const conn = await this.getConnection();
-
-    try {
-      // Begin transaction
-      await this.executeWithConnection(conn, "BEGIN TRANSACTION");
-
-      // Create transaction wrapper
-      const transactionConn = {
-        execute: (sql: string, params?: unknown[]) => this.executeWithConnection(conn, sql, params),
-      };
-
-      // Execute callback
-      const result = await callback(transactionConn);
-
-      // Commit transaction
-      await this.executeWithConnection(conn, "COMMIT");
-
-      return result;
-    } catch (error) {
-      // Rollback on error
-      try {
-        await this.executeWithConnection(conn, "ROLLBACK");
-      } catch (rollbackError) {
-        console.error("[ConnectionManager] Rollback failed:", rollbackError);
-      }
-      throw error;
-    } finally {
-      this.releaseConnection(conn);
-    }
+    const db = this.getDatabase();
+    return this.executeWithRetry(() => db.transaction(callback), "transaction");
   }
 
   /**
-   * Clean up idle connections
+   * Perform full-text search
    */
-  private startIdleCleanup(): void {
-    setInterval(() => {
-      const now = Date.now();
-      const idleConnections = this.pool.filter(
-        (c) => !c.inUse && now - c.lastUsed > this.config.idleTimeout,
-      );
+  async search(query: string, limit: number = 20, offset: number = 0): Promise<SearchResult[]> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
 
-      for (const conn of idleConnections) {
-        console.log(`[ConnectionManager] Closing idle connection: ${conn.id}`);
-
-        try {
-          conn.connection.close();
-        } catch (error) {
-          console.error("[ConnectionManager] Error closing connection:", error);
-        }
-
-        const index = this.pool.indexOf(conn);
-        if (index > -1) {
-          this.pool.splice(index, 1);
-        }
-      }
-
-      if (idleConnections.length > 0) {
-        console.log(
-          `[ConnectionManager] Cleaned up ${idleConnections.length} idle connections. Pool size: ${this.pool.length}`,
-        );
-      }
-    }, 60000); // Check every minute
+    const db = this.getDatabase();
+    return this.executeWithRetry(() => db.search(query, limit, offset), "search");
   }
 
   /**
-   * Close all connections and clean up
+   * Save a document to the database
+   */
+  async saveDocument(doc: Document): Promise<number> {
+    const sql = `
+      INSERT INTO documents (url, title, site, word_count, hash, raw_text)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(hash) DO UPDATE SET
+        title = excluded.title,
+        site = excluded.site,
+        word_count = excluded.word_count,
+        raw_text = excluded.raw_text,
+        saved_at = datetime('now')
+    `;
+
+    const result = await this.execute(sql, [
+      doc.url,
+      doc.title || null,
+      doc.site || null,
+      doc.word_count || null,
+      doc.hash || null,
+      doc.raw_text,
+    ]);
+
+    return result.lastInsertRowid;
+  }
+
+  /**
+   * Get a document by ID
+   */
+  async getDocument(id: number): Promise<Document | null> {
+    const [doc] = await this.query<Document>("SELECT * FROM documents WHERE id = ?", [id]);
+    return doc || null;
+  }
+
+  /**
+   * Get document history
+   */
+  async getHistory(limit: number = 50, offset: number = 0): Promise<Document[]> {
+    return this.query<Document>(
+      `SELECT * FROM documents 
+       ORDER BY saved_at DESC 
+       LIMIT ? OFFSET ?`,
+      [limit, offset],
+    );
+  }
+
+  /**
+   * Delete all data (for privacy)
+   */
+  async deleteAllData(): Promise<void> {
+    await this.transaction(async (db) => {
+      // Delete in correct order to respect foreign keys
+      await db.execute("DELETE FROM ab_scores");
+      await db.execute("DELETE FROM ab_runs");
+      await db.execute("DELETE FROM summaries");
+      await db.execute("DELETE FROM documents");
+
+      // Vacuum to reclaim space
+      await db.execute("VACUUM");
+    });
+  }
+
+  /**
+   * Get database statistics
+   */
+  async getStats(): Promise<{
+    documentCount: number;
+    summaryCount: number;
+    databaseSize: number;
+  }> {
+    if (!this.isInitialized) {
+      await this.initialize();
+    }
+
+    const db = this.getDatabase();
+    return db.getStats();
+  }
+
+  /**
+   * Close the database connection
    */
   async close(): Promise<void> {
-    console.log("[ConnectionManager] Closing all connections...");
+    console.log("[ConnectionManager] Closing database connection...");
 
-    // Wait for all connections to be released
-    const maxWait = 5000; // 5 seconds
-    const startTime = Date.now();
-
-    while (this.pool.some((c) => c.inUse) && Date.now() - startTime < maxWait) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    if (this.db) {
+      await this.db.close();
+      this.db = null;
+      this.isInitialized = false;
+      this.initializationPromise = null;
     }
 
-    // Close all connections
-    for (const conn of this.pool) {
-      try {
-        conn.connection.close();
-      } catch (error) {
-        console.error(`[ConnectionManager] Error closing connection ${conn.id}:`, error);
-      }
-    }
-
-    this.pool = [];
-    this.isInitialized = false;
-
-    console.log("[ConnectionManager] All connections closed");
+    console.log("[ConnectionManager] Database connection closed");
   }
 }

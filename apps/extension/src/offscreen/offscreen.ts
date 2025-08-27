@@ -360,7 +360,7 @@ class OffscreenDocument {
 
     const result = await this.connectionManager.query(sql, params);
 
-    return this.createSuccessResponse(message, result.rows[0] || null);
+    return this.createSuccessResponse(message, result[0] || null);
   }
 
   private async handleDocumentSearch(message: RequestMessage): Promise<ResponseMessage> {
@@ -390,8 +390,8 @@ class OffscreenDocument {
     const result = await this.connectionManager.query(sql, [query, limit, offset]);
 
     return this.createSuccessResponse(message, {
-      results: result.rows,
-      count: result.rows.length,
+      results: result,
+      count: result.length,
     });
   }
 
@@ -448,7 +448,7 @@ class OffscreenDocument {
 
     const result = await this.connectionManager.query(sql, params);
 
-    return this.createSuccessResponse(message, id ? result.rows[0] || null : result.rows);
+    return this.createSuccessResponse(message, id ? result[0] || null : result);
   }
 
   private async handleAbRunInsert(message: RequestMessage): Promise<ResponseMessage> {
@@ -561,7 +561,7 @@ class OffscreenDocument {
       [query],
     );
 
-    const total = (countResult.rows[0] as TotalRow)?.total || 0;
+    const total = (countResult[0] as TotalRow)?.total || 0;
 
     const response: ResponseMessage = {
       type: MessageType.DB_SEARCH_RESPONSE,
@@ -569,10 +569,10 @@ class OffscreenDocument {
       timestamp: Date.now(),
       success: true,
       data: {
-        results: result.rows as SearchResultRow[],
+        results: result as SearchResultRow[],
         meta: {
           total,
-          returned: result.rows.length,
+          returned: result.length,
           offset,
           executionTime: Date.now() - message.timestamp,
           hasMore: offset + limit < total,
@@ -621,10 +621,10 @@ class OffscreenDocument {
     });
 
     const counts = {
-      documents: (docCount.rows[0] as CountRow).count,
-      summaries: (sumCount.rows[0] as CountRow).count,
-      abRuns: (abRunCount.rows[0] as CountRow).count,
-      abScores: (abScoreCount.rows[0] as CountRow).count,
+      documents: (docCount[0] as CountRow).count,
+      summaries: (sumCount[0] as CountRow).count,
+      abRuns: (abRunCount[0] as CountRow).count,
+      abScores: (abScoreCount[0] as CountRow).count,
     };
 
     const response: ResponseMessage = {
@@ -705,7 +705,7 @@ class OffscreenDocument {
     }
 
     const countResult = await this.connectionManager.query(countSql, countParams);
-    const total = (countResult.rows[0] as TotalRow)?.total || 0;
+    const total = (countResult[0] as TotalRow)?.total || 0;
 
     const response: ResponseMessage = {
       type: MessageType.DB_GET_HISTORY_RESPONSE,
@@ -713,7 +713,7 @@ class OffscreenDocument {
       timestamp: Date.now(),
       success: true,
       data: {
-        documents: result.rows.map((row) => {
+        documents: result.map((row: unknown) => {
           const typedRow = row as DocumentWithSummaryCount;
           return {
             ...typedRow,
@@ -723,7 +723,7 @@ class OffscreenDocument {
         }),
         meta: {
           total,
-          returned: result.rows.length,
+          returned: result.length,
           offset,
           hasMore: offset + limit < total,
         },
@@ -849,7 +849,7 @@ class OffscreenDocument {
       sql.replace("SELECT *", "SELECT COUNT(*) as total"),
       params,
     );
-    const totalDocuments = (countResult.rows[0] as TotalRow)?.total || 0;
+    const totalDocuments = (countResult[0] as TotalRow)?.total || 0;
 
     // Create progress reporter
     const progressReporter = new ProgressReporter(
@@ -882,13 +882,13 @@ class OffscreenDocument {
       let chunkData = "";
       switch (request.format) {
         case "json":
-          chunkData = JSON.stringify(chunkResult.rows, null, 2);
+          chunkData = JSON.stringify(chunkResult, null, 2);
           break;
         case "csv":
-          chunkData = this.convertToCSV(chunkResult.rows);
+          chunkData = this.convertToCSV(chunkResult);
           break;
         case "markdown":
-          chunkData = this.convertToMarkdown(chunkResult.rows);
+          chunkData = this.convertToMarkdown(chunkResult);
           break;
       }
 
@@ -920,7 +920,7 @@ class OffscreenDocument {
         // Ignore if service worker is not available
       });
 
-      processedCount += chunkResult.rows.length;
+      processedCount += chunkResult.length;
       progressReporter.update(processedCount, "exporting");
       exportData += chunkData;
     }
