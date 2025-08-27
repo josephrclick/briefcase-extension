@@ -3,7 +3,7 @@
  * Provides a managed interface to sqlite3.wasm with OPFS support
  */
 
-import type { Database } from "./types";
+import type { Database, SearchResult } from "./types";
 
 // SQLite3 module types
 interface SQLite3Module {
@@ -250,10 +250,10 @@ CREATE INDEX IF NOT EXISTS idx_ab_scores_run_id ON ab_scores(run_id);
    * Queue a task for execution
    */
   private async queueTask<T>(task: () => Promise<T>): Promise<T> {
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       this.queue.push({
         execute: task,
-        resolve,
+        resolve: resolve as (value: unknown) => void,
         reject,
       });
       this.processQueue();
@@ -299,7 +299,7 @@ CREATE INDEX IF NOT EXISTS idx_ab_scores_run_id ON ab_scores(run_id);
           console.warn(`Slow query (${duration.toFixed(2)}ms):`, sql);
         }
 
-        return results;
+        return results as T[];
       } catch (error) {
         console.error("Query error:", error, "SQL:", sql);
         throw error;
@@ -347,7 +347,7 @@ CREATE INDEX IF NOT EXISTS idx_ab_scores_run_id ON ab_scores(run_id);
   /**
    * Perform full-text search using FTS5
    */
-  async search(query: string, limit: number = 20, offset: number = 0): Promise<unknown[]> {
+  async search(query: string, limit: number = 20, offset: number = 0): Promise<SearchResult[]> {
     const sql = `
       SELECT 
         d.id,
@@ -366,7 +366,7 @@ CREATE INDEX IF NOT EXISTS idx_ab_scores_run_id ON ab_scores(run_id);
       LIMIT ? OFFSET ?
     `;
 
-    return this.query(sql, [query, limit, offset]);
+    return this.query<SearchResult>(sql, [query, limit, offset]);
   }
 
   /**

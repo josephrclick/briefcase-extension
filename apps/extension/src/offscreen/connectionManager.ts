@@ -63,7 +63,7 @@ export class ConnectionManager {
     this.db = new SQLiteWrapper(this.config.useOPFS);
 
     // Initialize the database (loads WASM, opens OPFS DB, runs schema)
-    await this.db.initialize();
+    await this.db!.initialize();
 
     console.log("[ConnectionManager] Database initialized with OPFS support");
   }
