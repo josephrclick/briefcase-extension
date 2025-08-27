@@ -3,13 +3,14 @@
   "name": "Briefcase",
   "version": "1.0.0",
   "description": "Summarize any page in a pinned side panel. Local-first. Optional A/B compare.",
+  "minimum_chrome_version": "109",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "permissions": ["activeTab", "scripting", "storage", "downloads", "sidePanel"],
+  "permissions": ["activeTab", "scripting", "storage", "downloads", "sidePanel", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_title": "Open Briefcase",
