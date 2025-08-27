@@ -27,6 +27,8 @@ const pendingRequests = new Map<
 const REQUEST_TIMEOUT = 30000; // 30 seconds
 const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 const HEARTBEAT_TIMEOUT = 5000; // 5 seconds
+const MESSAGE_RETRY_ATTEMPTS = 3; // Number of retry attempts for failed messages
+const MESSAGE_RETRY_DELAY = 1000; // 1 second delay between retries
 
 /**
  * OffscreenProxy manages the offscreen document lifecycle and message passing
@@ -181,7 +183,7 @@ export class OffscreenProxy {
   }
 
   /**
-   * Send a message to the offscreen document
+   * Send a message to the offscreen document with retry logic
    */
   private async sendMessage(message: RequestMessage): Promise<unknown> {
     // Validate message type
@@ -200,15 +202,56 @@ export class OffscreenProxy {
     // Ensure document exists
     await this.ensureOffscreenDocument();
 
+    // Implement retry logic
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= MESSAGE_RETRY_ATTEMPTS; attempt++) {
+      try {
+        return await this.sendMessageAttempt(message, attempt);
+      } catch (error) {
+        lastError = error as Error;
+        console.warn(
+          `[OffscreenProxy] Message send attempt ${attempt}/${MESSAGE_RETRY_ATTEMPTS} failed:`,
+          error,
+        );
+
+        // Don't retry if it's a validation error or the last attempt
+        if (
+          attempt === MESSAGE_RETRY_ATTEMPTS ||
+          lastError.message.includes("Invalid message type") ||
+          lastError.message.includes("Message type is required")
+        ) {
+          break;
+        }
+
+        // Wait before retrying
+        await new Promise((resolve) => setTimeout(resolve, MESSAGE_RETRY_DELAY * attempt));
+
+        // Ensure document still exists before retry
+        await this.ensureOffscreenDocument();
+      }
+    }
+
+    throw lastError || new Error(`Failed to send message after ${MESSAGE_RETRY_ATTEMPTS} attempts`);
+  }
+
+  /**
+   * Single attempt to send a message
+   */
+  private async sendMessageAttempt(
+    message: RequestMessage,
+    attemptNumber: number,
+  ): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const messageId =
-        message.id || `msg-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        message.id ||
+        `msg-${Date.now()}-${Math.random().toString(36).substring(7)}-attempt${attemptNumber}`;
       const fullMessage = { ...message, id: messageId };
 
       // Set up timeout
       const timeout = setTimeout(() => {
         pendingRequests.delete(messageId);
-        reject(new Error(`Request timeout: ${message.type}`));
+        reject(new Error(`Request timeout: ${message.type} (attempt ${attemptNumber})`));
       }, REQUEST_TIMEOUT);
 
       // Track pending request

@@ -227,8 +227,9 @@ export class ConnectionManager {
   private async createConnection(): Promise<PooledConnection> {
     console.log(`[ConnectionManager] Creating new connection (pool size: ${this.pool.length})`);
 
-    // TODO: Actually create SQLite connection
-    // For now, mock implementation
+    // TODO: Replace with actual SQLite WASM implementation from @briefcase/db package
+    // This mock implementation is temporary and should be replaced before production
+    // Required: Import and initialize SQLite WASM, create actual database connection
     const mockConnection: SQLiteConnection = {
       exec: (sql: string, _params?: unknown[]) => {
         // Mock implementation
@@ -307,12 +308,13 @@ export class ConnectionManager {
     let attempts = 0;
 
     while (attempts < this.config.retryAttempts) {
-      // Set up query timeout
+      // Set up query timeout (using number type for browser environment)
       let timeoutId: number | undefined;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
+        // In browser environment, setTimeout returns a number
+        timeoutId = window.setTimeout(() => {
           reject(new Error(`Query timeout exceeded (${this.config.queryTimeout}ms)`));
-        }, this.config.queryTimeout) as unknown as number;
+        }, this.config.queryTimeout);
       });
 
       try {
@@ -323,15 +325,15 @@ export class ConnectionManager {
         ]);
 
         // Clear timeout if query succeeded
-        if (timeoutId) {
-          clearTimeout(timeoutId);
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
         }
 
         return result;
       } catch (error) {
         // Clear timeout on error
-        if (timeoutId) {
-          clearTimeout(timeoutId);
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
         }
 
         attempts++;

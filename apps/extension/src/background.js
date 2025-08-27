@@ -289,6 +289,40 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
 });
 
+// Clean up offscreen document on extension update/uninstall
+chrome.runtime.onSuspend.addListener(async () => {
+  console.log("[BG] Extension suspending, cleaning up offscreen document...");
+  try {
+    // Check if offscreen document exists and close it
+    const offscreenUrl = chrome.runtime.getURL("src/offscreen/offscreen.html");
+    const existingContexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT"],
+      documentUrls: [offscreenUrl],
+    });
+
+    if (existingContexts.length > 0) {
+      await chrome.offscreen.closeDocument();
+      console.log("[BG] Offscreen document closed successfully");
+    }
+  } catch (error) {
+    console.error("[BG] Error cleaning up offscreen document:", error);
+  }
+});
+
+// Also clean up on update/restart
+chrome.runtime.onUpdateAvailable.addListener(async (details) => {
+  console.log("[BG] Extension update available:", details.version);
+  try {
+    // Close offscreen document before update
+    await chrome.offscreen.closeDocument();
+  } catch (error) {
+    // Document might not exist, that's okay
+    console.debug("[BG] Offscreen document cleanup on update:", error.message);
+  }
+  // Allow the update to proceed
+  chrome.runtime.reload();
+});
+
 // Handle messages from content script and panel
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "SUMMARIZE") {
