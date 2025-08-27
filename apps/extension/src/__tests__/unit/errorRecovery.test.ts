@@ -6,12 +6,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { OffscreenProxy } from "../../background/offscreenProxy";
 import { MessageType } from "../../offscreen/offscreen";
 import { setupChromeMock, cleanupChromeMock } from "../utils/mockChromeApi";
-import { createMockRequest, createTimeoutHelper } from "../utils/messageHelpers";
+import { createMockRequest } from "../utils/messageHelpers";
 
 describe("Error Recovery Scenarios", () => {
   let offscreenProxy: any;
   let mockChrome: ReturnType<typeof setupChromeMock>;
-  const timeoutHelper = createTimeoutHelper();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -125,7 +124,8 @@ describe("Error Recovery Scenarios", () => {
 
     it("should clean up pending requests on timeout", async () => {
       const requestId = "test-request-123";
-      const request = createMockRequest(MessageType.DB_QUERY, undefined, requestId);
+      // Request is created but not used in this test
+      createMockRequest(MessageType.DB_QUERY, undefined, requestId);
 
       offscreenProxy["pendingRequests"].set(requestId, {
         resolve: vi.fn(),
