@@ -71,7 +71,7 @@ export class OffscreenProxy {
     // Handle heartbeat messages
     if (message.type === MessageType.HEARTBEAT) {
       this.lastHeartbeat = Date.now();
-      this.isDocumentReady = message.data?.initialized || false;
+      this.isDocumentReady = (message.data as { initialized?: boolean })?.initialized || false;
       console.log("[OffscreenProxy] Heartbeat received, initialized:", this.isDocumentReady);
       return;
     }
@@ -291,7 +291,7 @@ export class OffscreenProxy {
       type: MessageType.DOC_INSERT,
       timestamp: Date.now(),
       payload: document,
-    });
+    }) as Promise<{ id: number; changes: number }>;
   }
 
   /**
@@ -316,7 +316,7 @@ export class OffscreenProxy {
       type: MessageType.DOC_SEARCH,
       timestamp: Date.now(),
       payload: { query, ...options },
-    });
+    }) as Promise<{ results: unknown[]; count: number }>;
   }
 
   /**
@@ -333,7 +333,7 @@ export class OffscreenProxy {
       type: MessageType.SUMMARY_INSERT,
       timestamp: Date.now(),
       payload: summary,
-    });
+    }) as Promise<{ id: number; changes: number }>;
   }
 
   /**
@@ -360,7 +360,7 @@ export class OffscreenProxy {
       type: MessageType.AB_RUN_INSERT,
       timestamp: Date.now(),
       payload: abRun,
-    });
+    }) as Promise<{ id: number; changes: number }>;
   }
 
   /**
@@ -378,7 +378,7 @@ export class OffscreenProxy {
       type: MessageType.AB_SCORE_INSERT,
       timestamp: Date.now(),
       payload: score,
-    });
+    }) as Promise<{ id: number; changes: number }>;
   }
 
   /**
