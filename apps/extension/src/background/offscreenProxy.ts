@@ -184,6 +184,19 @@ export class OffscreenProxy {
    * Send a message to the offscreen document
    */
   private async sendMessage(message: RequestMessage): Promise<unknown> {
+    // Validate message type
+    if (!message.type) {
+      throw new Error("Message type is required");
+    }
+
+    // Check if message type is valid (exists in MessageType enum)
+    const validTypes = Object.values(MessageType);
+    if (!validTypes.includes(message.type as MessageType)) {
+      throw new Error(
+        `Invalid message type: ${message.type}. Valid types are: ${validTypes.join(", ")}`,
+      );
+    }
+
     // Ensure document exists
     await this.ensureOffscreenDocument();
 

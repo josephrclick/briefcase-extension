@@ -21,6 +21,7 @@ interface DatabaseConfig {
   idleTimeout: number;
   retryAttempts: number;
   retryDelay: number;
+  queryTimeout: number;
 }
 
 interface PooledConnection {
@@ -37,6 +38,7 @@ export class ConnectionManager {
     idleTimeout: 300000, // 5 minutes
     retryAttempts: 3,
     retryDelay: 1000, // 1 second
+    queryTimeout: 30000, // 30 seconds
   };
 
   private pool: PooledConnection[] = [];
@@ -261,6 +263,13 @@ export class ConnectionManager {
 
     return new Promise((resolve, reject) => {
       const checkInterval = setInterval(() => {
+        // Add pool health check
+        if (this.pool.length === 0) {
+          clearInterval(checkInterval);
+          reject(new Error("Connection pool is empty - no connections available"));
+          return;
+        }
+
         const available = this.pool.find((c) => !c.inUse);
 
         if (available) {
@@ -298,9 +307,33 @@ export class ConnectionManager {
     let attempts = 0;
 
     while (attempts < this.config.retryAttempts) {
+      // Set up query timeout
+      let timeoutId: number | undefined;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          reject(new Error(`Query timeout exceeded (${this.config.queryTimeout}ms)`));
+        }, this.config.queryTimeout) as unknown as number;
+      });
+
       try {
-        return pooledConnection.connection.exec(sql, params);
+        // Race between query execution and timeout
+        const result = await Promise.race([
+          Promise.resolve(pooledConnection.connection.exec(sql, params)),
+          timeoutPromise,
+        ]);
+
+        // Clear timeout if query succeeded
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
+        return result;
       } catch (error) {
+        // Clear timeout on error
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+
         attempts++;
 
         if (attempts >= this.config.retryAttempts) {
