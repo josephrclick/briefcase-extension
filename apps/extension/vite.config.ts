@@ -13,15 +13,6 @@ export default defineConfig({
         sidepanel: "src/sidepanel/index.html",
         offscreen: "src/offscreen/offscreen.html",
       },
-      output: {
-        // Ensure WASM and worker files maintain their names
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name?.endsWith(".wasm")) {
-            return "assets/[name][extname]";
-          }
-          return "assets/[name]-[hash][extname]";
-        },
-      },
     },
   },
   resolve: {
@@ -30,15 +21,9 @@ export default defineConfig({
     },
   },
   // Configure asset handling for WASM and worker files
-  assetsInclude: ["**/*.wasm", "**/*-worker*.js"],
+  assetsInclude: ["**/*.wasm"],
   optimizeDeps: {
-    exclude: ["@sqlite.org/sqlite-wasm", "@briefcase/db/sqlite3"],
-  },
-  server: {
-    fs: {
-      // Allow serving files from packages directory
-      allow: [".."],
-    },
+    exclude: ["@sqlite.org/sqlite-wasm"],
   },
   worker: {
     format: "es",
