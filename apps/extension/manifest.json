@@ -35,7 +35,12 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["assets/*.wasm", "assets/*.js", "assets/*.mjs", "src/offscreen/offscreen.html"],
+      "resources": [
+        "packages/db/sqlite3/*.wasm",
+        "packages/db/sqlite3/*.js",
+        "packages/db/sqlite3/*.mjs",
+        "src/offscreen/offscreen.html"
+      ],
       "matches": ["<all_urls>"]
     }
   ]
