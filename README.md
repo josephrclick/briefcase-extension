@@ -1,5 +1,7 @@
 # 🕵️ Briefcase: Your Enthusiastically Incompetent Web Summarizer
 
+## briefcase-extension has been archived and reborn as [briefcase](https://github.com/josephrclick/briefcase). 
+
 _Tap tap tap_ 📎
 
 Oh! Hello there! I see you're trying to read a... _squints at clipboard_ ...web page? A really, REALLY long one?
